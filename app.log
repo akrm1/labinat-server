@@ -1,0 +1,56 @@
+### create-project ...
+EXECUTE: echo my_website
+<***** START *****>
+my_website
+Return Code: 0
+<***** END *****>
+------------------------------------------------
+** Successfully Execute 'Build' Operator **
+### create-project ...
+EXECUTE: echo my_website
+<***** START *****>
+my_website
+Return Code: 0
+<***** END *****>
+------------------------------------------------
+** Successfully Execute 'Build' Operator **
+### create-project ...
+EXECUTE: echo my_website
+<***** START *****>
+my_website
+Return Code: 0
+<***** END *****>
+------------------------------------------------
+** Successfully Execute 'Build' Operator **
+### create-project ...
+EXECUTE: echo my_website
+<***** START *****>
+my_website
+Return Code: 0
+<***** END *****>
+------------------------------------------------
+** Successfully Execute 'Build' Operator **
+### create-project ...
+EXECUTE: echo my_website
+<***** START *****>
+my_website
+Return Code: 0
+<***** END *****>
+------------------------------------------------
+** Successfully Execute 'Build' Operator **
+### create-project ...
+EXECUTE: echo my_website
+<***** START *****>
+my_website
+Return Code: 0
+<***** END *****>
+------------------------------------------------
+** Successfully Execute 'Build' Operator **
+### create-project ...
+EXECUTE: echo my_website
+<***** START *****>
+my_website
+Return Code: 0
+<***** END *****>
+------------------------------------------------
+** Successfully Execute 'Build' Operator **

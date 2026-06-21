@@ -1,0 +1,48 @@
+{
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "The name of the frame"
+        },
+        "factory": {
+            "type": "string",
+            "description": "The factory of the frame"
+        },
+        "concretes": {
+            "type": "array",
+            "description": "The concretes of the frame",
+            "items": {
+                "type": "string",
+                "description": "The name of the concrete"
+            }
+        },
+        "description": {
+            "type": "string",
+            "description": "The description of the frame"
+        },
+        "properties": {
+            "type": "object",
+            "description": "The properties of the frame",
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "The type of the property"
+                    }
+                },
+                "required": ["type"]
+            }
+        },
+        "required": {
+            "type": "array",
+            "description": "The required properties of the frame",
+            "items": {
+                "type": "string",
+                "description": "The name of the required property"
+            }
+        }
+    },
+    "required": ["name", "factory", "concretes", "description", "properties"]
+}

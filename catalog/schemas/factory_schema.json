@@ -1,0 +1,90 @@
+{
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+        "description": {
+            "type": "string",
+            "description": "The description of the factory"
+        },
+        "config": {
+            "type": "object",
+            "description": "The config schema for this factory's slice of the project config",
+            "properties": {
+                "properties": {
+                    "type": "object"
+                },
+                "required": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                }
+            }
+        },
+        "enums": {
+            "type": "object",
+            "description": "Enum definitions used by frames"
+        },
+        "lifecycle": {
+            "type": "object",
+            "description": "The lifecycle phases of the factory",
+            "properties": {
+                "build": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "cmd":  { "type": "string" }
+                        },
+                        "required": ["name", "cmd"]
+                    }
+                },
+                "rebuild": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "cmd":  { "type": "string" }
+                        },
+                        "required": ["name", "cmd"]
+                    }
+                },
+                "run": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "cmd":  { "type": "string" }
+                        },
+                        "required": ["name", "cmd"]
+                    }
+                },
+                "debug": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "cmd":  { "type": "string" }
+                        },
+                        "required": ["name", "cmd"]
+                    }
+                },
+                "release": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "cmd":  { "type": "string" }
+                        },
+                        "required": ["name", "cmd"]
+                    }
+                }
+            },
+            "required": ["build", "rebuild", "run", "debug", "release"]
+        }
+    },
+    "required": ["lifecycle"]
+}

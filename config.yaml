@@ -1,0 +1,28 @@
+catalog:
+  path: "catalog"
+
+workspace:
+  path: "workspace"
+
+database:
+  url: "sqlite:///./data/database.db"
+  logging: false
+
+logger:
+  name: app
+  level: info
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  datefmt: "%Y-%m-%d %H:%M:%S"
+  handlers:
+    file:
+      path: "app.log"
+
+frame:
+  pipeline:
+    - name: loader
+      description: The loader of the block
+      params:
+        properties:
+          type: object
+        concrete:
+          type: string
