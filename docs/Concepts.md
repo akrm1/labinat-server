@@ -9,7 +9,7 @@ Technical reference for Labinat. Covers all core terms, how the system is struct
 | Term | Definition |
 |------|------------|
 | **Catalog** | The registry of factories and frames. Path configured in `config.yaml` (default: `catalog/`). |
-| **Factory** | A versioned stack profile: lifecycle commands, frame definitions, enums, and a config schema. |
+| **Factory** | A versioned stack profile: lifecycle commands, frame definitions, maps, and a config schema. |
 | **Frame** | A component-type definition: what fields a block may contain and what output files it produces. |
 | **Block** | One instance of a frame — a validated JSON object describing a single component (e.g. one table, one screen). |
 | **Concrete** | A named output file that a frame can generate. Each concrete name maps to a Jinja2 template. |

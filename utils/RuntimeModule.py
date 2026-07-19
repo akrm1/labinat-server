@@ -26,6 +26,9 @@ class RuntimeModule():
             return getattr(self.__module, key)
         except Exception as e:
             raise RuntimeError(f"Identifier \'{key}\' not found") from e
+
+    def has(self, key: str) -> bool:
+        return hasattr(self.__module, key)
     
     def validate_function(self, function_name: str, signature: dict[str, dict]):
         module_function = self[function_name]

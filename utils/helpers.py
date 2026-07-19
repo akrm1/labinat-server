@@ -2,6 +2,10 @@ from typing import Any, Mapping
 import json
 import yaml
 from jsonpath_ng import parse
+import uuid
+
+def generate_unique_id() -> str:
+    return str(uuid.uuid4())
 
 def asjson(obj: Any) -> str:
     return json.dumps(obj, indent=2, ensure_ascii=False, default=str)

@@ -17,12 +17,3 @@ logger:
     file:
       path: "app.log"
 
-frame:
-  pipeline:
-    - name: loader
-      description: The loader of the block
-      params:
-        properties:
-          type: object
-        concrete:
-          type: string

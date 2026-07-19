@@ -1,0 +1,8 @@
+{% set types = {"integer": "int", "string": "str", "boolean": "bool", "number": "float"} -%}
+from dataclasses import dataclass
+
+
+@dataclass
+class {{ block.spec.name | pascal }}:
+{% for column in block.spec.columns %}    {{ column.name }}: {{ types.get(column.type, "str") }}
+{% endfor %}

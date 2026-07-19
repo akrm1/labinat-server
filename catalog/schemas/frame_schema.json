@@ -13,8 +13,23 @@
             "type": "array",
             "description": "The concretes of the frame",
             "items": {
-                "type": "string",
-                "description": "The name of the concrete"
+                "type": "object",
+                "description": "The concrete object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The base name of the concrete, without extension (e.g. 'model'). Must match a template file 'concretes/<name>.<extension>.j2' (or '.<extension>' if not a template)."
+                    },
+                    "extension": {
+                        "type": "string",
+                        "description": "The output file extension, without the leading dot (e.g. 'py')"
+                    },
+                    "destination": {
+                        "type": "string",
+                        "description": "The directory (relative to src/<factory>) where the rendered concrete is written"
+                    }
+                },
+                "required": ["name", "extension", "destination"]
             }
         },
         "description": {

@@ -3,7 +3,7 @@ from jsonschema.validators import extend
 import jsonschema as schema_engine
 from jsonschema.exceptions import UnknownType
 from base.types.DataType import DataType
-from utils.helpers import flatten_dict
+from utils.helpers import flatten_dict, jsonpath
 
 PRIMITIVE_TYPE_MAP = {
     int: "integer",
@@ -40,12 +40,22 @@ class UndefinedTypeError(FailureError):
         super().__init__(f"Type \'{type}\'is not defined")
 
 class ValidationError(FailureError):
-    def __init__(self, key: str, value: any, expected_type: Union[DataType, str], path: str, is_primitive: bool = False):
+    def __init__(self, key: str, value: any, expected_type: Union[DataType, str, list[DataType]], path: str, is_primitive: bool = False):
         jsonpath = self.get_jsonpath(path)
         message = f"Invalid value for '{jsonpath}'\n  "
 
         value_type = PRIMITIVE_TYPE_MAP[type(value)]
-        if is_primitive:
+        if isinstance(expected_type, list):
+            types_names = [str(data_type) for data_type in expected_type]
+            message += f"expected one of '{types_names}' types, but got '{value_type}' value: {value}"
+            message += "\n    Expected Types Validation Failures:"
+
+            for data_type in expected_type:
+                if isinstance(data_type, DataType):
+                    message += f"\n      - {data_type.name}: {data_type.invalid_msg(key, value, value_type)}"
+                else:
+                    message += f"\n      - {data_type}: unknown"
+        elif is_primitive:
             message += f"expected '{expected_type}' type, but got '{value_type}' value: {value}"
         else:
             message += expected_type.invalid_msg(key, value, value_type)
@@ -103,15 +113,24 @@ class Schema:
                 missing_field = e.message.split("'")[1]
                 raise MissingKeyError(missing_field, e.absolute_path) from None
             
-            expected_type_name = e.validator_value
-            expected_type = self.__types.get(expected_type_name, None)
+            expected_type_value = e.validator_value
             value = e.instance
+
+            if isinstance(expected_type_value, list):
+                expected_types = [self.__types.get(type_name, type_name) for type_name in expected_type_value]
+                raise ValidationError(key, value, expected_types, e.absolute_path) from None
+
+            expected_type = self.__types.get(expected_type_value, None)            
             if expected_type is None:
-                raise ValidationError(key, value, expected_type_name, e.absolute_path, is_primitive=True) from None
+                raise ValidationError(key, value, expected_type_value, e.absolute_path, is_primitive=True) from None
             
             raise ValidationError(key, value, expected_type, e.absolute_path) from None
         except UnknownType as e:
             raise UndefinedTypeError(e.type) from None
+
+
+    def jsonpath(self, path: str):
+        return jsonpath(self.__jsonschema, path)
 
     def get(self, key: str, default: any = None):
         return self.__flat.get(key, default)
@@ -119,11 +138,14 @@ class Schema:
     def __getitem__(self, key: str):
         return self.__flat[key]
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.__jsonschema)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return repr(self.__jsonschema)
+
+    def asdict(self) -> dict:
+        return self.__jsonschema
 
     @staticmethod
     def primitive_type_map(type: Type) -> str:

@@ -19,9 +19,9 @@
                 }
             }
         },
-        "enums": {
+        "maps": {
             "type": "object",
-            "description": "Enum definitions used by frames"
+            "description": "Maps definitions used by frames"
         },
         "lifecycle": {
             "type": "object",

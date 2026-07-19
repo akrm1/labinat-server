@@ -47,7 +47,7 @@ class Workspace:
             
             # create project directories
             project.path.mkdir(parents=True, exist_ok=True) # create project directory
-            project.src.joinpath("src").mkdir(parents=True, exist_ok=True) # create src directory
+            project.src.mkdir(parents=True, exist_ok=True) # create src directory
 
             project_record = ProjectModel(id=project_id, name=name, description=description, config=config, created_at=created_at)
             db.add(project_record)
@@ -131,7 +131,8 @@ class Workspace:
             for block_record in blocks_records:
                 factory = project.get_factory(block_record.factory)
                 frame = factory.get_frame(block_record.frame)
-                block = Block(factory=factory, frame=frame, name=block_record.name, data=block_record.data)
+                block = Block(frame=frame, name=block_record.name, data=block_record.data)
+                block.load(project, factory)
                 project.add_block(block)
             
             return project
@@ -155,7 +156,8 @@ class Workspace:
                 for block_record in blocks_records:
                     factory = project.get_factory(block_record.factory)
                     frame = factory.get_frame(block_record.frame)
-                    block = Block(factory=factory, frame=frame, name=block_record.name, data=block_record.data)
+                    block = Block(frame=frame, name=block_record.name, data=block_record.data)
+                    block.load(project, factory)
                     project.add_block(block)
                 
                 projects[project_record.id] = project
@@ -170,7 +172,8 @@ class Workspace:
         if not factory or not frame:
             return None
 
-        block = Block(factory=factory, frame=frame, name=block_name, data=data)
+        block = Block(frame=frame, name=block_name, data=data)
+        block.load(project, factory)
         block.validate()
 
         with get_db() as db:
@@ -182,16 +185,16 @@ class Workspace:
 
     def delete_blocks(self, project: Project, blocks_names: list[str]) -> bool:
         with get_db() as db:
-            db.query(BlockModel).filter_by(BlockModel.project_id == project.id, BlockModel.name.in_(blocks_names)).delete()
+            db.query(BlockModel).filter(BlockModel.project_id == project.id, BlockModel.name.in_(blocks_names)).delete()
             db.commit()
 
             return True
 
-    def get_blocka(self, project: Project, blocks_names: list[str]) -> dict[str, Block]:
+    def get_blocks(self, project: Project, blocks_names: list[str]) -> dict[str, Block]:
         blocks = {}
 
         with get_db() as db:
-            block_records = db.query(BlockModel).filter_by(BlockModel.project_id == project.id, BlockModel.name.in_(blocks_names)).all()
+            block_records = db.query(BlockModel).filter(BlockModel.project_id == project.id, BlockModel.name.in_(blocks_names)).all()
             for block_record in block_records:
                 factory = project.get_factory(block_record.factory)
                 frame = factory.get_frame(block_record.frame)
@@ -199,7 +202,9 @@ class Workspace:
                 if not factory or not frame:
                     continue
 
-                blocks[block_record.name] = Block(factory=factory, frame=frame, name=block_record.name, data=block_record.data)
+                block = Block(frame=frame, name=block_record.name, data=block_record.data)
+                block.load(project, factory)
+                blocks[block_record.name] = block
 
         return blocks
 

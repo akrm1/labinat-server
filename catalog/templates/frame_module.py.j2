@@ -1,0 +1,9 @@
+# Module for "{{ frame.id }}"
+
+def loader(properties: dict, concrete: str) -> dict:
+    """Return the render context for the given concrete."""
+    return properties
+
+def destination(properties: dict, concrete: str) -> str:
+    """Return the output path (relative to src/<factory>) for the given concrete."""
+    return f"{concrete}/{properties['name']}"

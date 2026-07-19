@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Union
 from jinja2 import Template
 import re
+import os
 
 
 def execute(cmd: str, inputs: dict = None, cwd: Union[str, Path] = None):

@@ -2,13 +2,83 @@
 import server
 server.init()
 
-catalog = server.controller.catalog
-workspace = server.controller.workspace
+from base.Spec import Spec
+from base.Binding import Binding
+
+schema = {
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": ["binding.table", "binding.model"]
+        },
+        "columns": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    }
+                }
+            }
+        }
+    }
+}
+
+data = {
+    "name": "@block.name",
+    "columns": [
+        {
+            "name": "blue",
+            "type": "integer"
+        }
+    ]
+}
 
 
-factory = catalog.get_factory(factory_name="backend-fastapi", version="v1")
-print(factory)
-workspace.summary(catalog)
+spec = Spec(data)
+
+spec.define_binding("pra", "table", [
+    Binding(
+        binding_object="block",
+        type_fetcher=lambda z: 'table',
+        object_fetcher=lambda z: 2,
+        binder=lambda x, y: f"{x}-{y}"
+    )
+])
+spec.define_binding("tra", "model", [
+    Binding(
+        binding_object="block",
+        type_fetcher=lambda z: 'table',
+        object_fetcher=lambda z: 5,
+        binder=lambda x, y: f"{x}-{y}"
+    )
+])
+
+spec.validate(schema)
+spec = spec.decode()
+print(spec.asjson())
+
+#catalog = server.controller.catalog
+#workspace = server.controller.workspace
+
+
+#factory = catalog.get_factory(factory_name="backend-fastapi", version="v1")
+
+project_id = "b07ac48f-98b7-46c3-bc53-da558a676621"
+config = {
+    "app": {
+        "name": "akrm_website"
+    }
+}
+
+#project = workspace.create_project(name="my_website", description="My website", config=config)
+#project.add_factory(factory)
+#project.clone()
+#project = workspace.get_project(project_id=project_id, catalog=catalog)
+#workspace.delete_project(project_id=project_id)
+#project.clone()
+#print(project)
 
 #catalog.summary()
 

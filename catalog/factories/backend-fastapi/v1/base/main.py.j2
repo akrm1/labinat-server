@@ -1,0 +1,8 @@
+from fastapi import FastAPI
+
+app = FastAPI(title="{{ app.name }}")
+
+
+@app.get("/")
+def root():
+    return {"app": "{{ app.name }}"}

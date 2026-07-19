@@ -1,9 +1,0 @@
-{
-  "name": "users",
-  "columns": [
-    {
-      "name": "blue",
-      "type": "integer"
-    }
-  ]
-}

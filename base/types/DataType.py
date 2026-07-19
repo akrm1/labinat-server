@@ -1,5 +1,14 @@
 from abc import ABC, abstractmethod
 
+class DecodingError(Exception):
+    def __init__(self, message: str):
+        self.__message = message
+        super().__init__(self.__message)
+
+    @property
+    def message(self) -> str:
+        return self.__message
+
 class DataType(ABC):
     DECODERS = {}
     def __init__(self, name: str):
@@ -7,7 +16,7 @@ class DataType(ABC):
         DataType.DECODERS[self.__name] = self.decode
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.__name
 
     @abstractmethod
@@ -21,3 +30,9 @@ class DataType(ABC):
     @abstractmethod
     def decode(self, value: any) -> any:
         pass
+
+    def __str__(self) -> str:
+        return self.__name
+
+    def __repr__(self) -> str:
+        return self.__name

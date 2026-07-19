@@ -7,6 +7,7 @@ from data.models.FactoryModel import FactoryModel
 from data.models.FrameModel import FrameModel
 from core.resources.Factory import Factory
 from core.resources.Frame import Frame
+from base.Template import Template
 
 
 class Catalog:
@@ -17,11 +18,38 @@ class Catalog:
     def path(self) -> Path:
         return self.__path
 
+    def get_context(self, factory: Factory = None, frame: Frame = None) -> dict:
+        context = {}
+        context["catalog"] = {
+            "path": self.__path.absolute()
+        }
+
+        if factory is not None:
+            context["factory"] = {
+                "name": factory.name,
+                "version": factory.version,
+                "path": factory.path.absolute(),
+                "version_path": factory.version_path.absolute()
+            }
+
+        if frame is not None:
+            context["frame"] = {
+                "id": frame.id,
+                "name": frame.name,
+                "path": frame.path.absolute()
+            }
+
+        return context
+
     def get_factory_path(self, factory_name: str) -> Path:
         return self.__path.joinpath("factories").joinpath(factory_name)
 
     def get_schema(self, name: str) -> dict:
         return load_json(self.__path.joinpath("schemas").joinpath(f"{name}.json"))
+
+    def get_template(self, filename: str) -> Template:
+        filepath = self.__path.joinpath("templates").joinpath(f"{filename}.j2")
+        return Template.from_file(filepath)
 
     def __create_factory_directory_structure(self, factory: Factory):
         # create factory directory structure
@@ -46,7 +74,8 @@ class Catalog:
         module_path = frame.path.joinpath("module.py")
         module_path.touch()
 
-        module_content = frame.get_module_template_content()
+        context = self.get_context(frame=frame)
+        module_content = self.get_template("frame_module.py").render(context)
         module_path.write_text(module_content)
 
     def create_factory(self, factory_name: str, factory_version: str, data: dict, frames: list[str]) -> Factory:
@@ -67,8 +96,8 @@ class Catalog:
 
                     # create frame directory structure
                     self.__create_frame_directory_structure(frame)
-                    # load module
-                    frame.load_module()
+                    # load frame components (module, concretes, bindings)
+                    frame.load()
                     # add frame to factory
                     factory.add_frame(frame)
                     # insert frame record
@@ -94,8 +123,8 @@ class Catalog:
 
                 # create frame directory structure
                 self.__create_frame_directory_structure(frame)
-                # load module
-                frame.load_module()
+                # load frame components (module, concretes, bindings)
+                frame.load()
                 # add frame to factory
                 factory.add_frame(frame)
                 # insert frame record
@@ -120,9 +149,8 @@ class Catalog:
 
             # create frame directory structure
             self.__create_frame_directory_structure(frame)
-            # load module
-            frame.load_module()
-
+            # load frame components (module, concretes, bindings)
+            frame.load()
             db.add(FrameModel(factory=factory_name, factory_version=version, name=frame.name, data=frame.spec.data))
             db.commit()
 
@@ -173,7 +201,7 @@ class Catalog:
                 frame_path = factory.version_path.joinpath("frames").joinpath(record.name)
 
                 frame = Frame(id=frame_id, name=record.name, data=record.data, path=frame_path)
-                frame.load_module()
+                frame.load()
                 factory.add_frame(frame)
 
             return factory
@@ -193,7 +221,7 @@ class Catalog:
                     frame_path = factory.version_path.joinpath("frames").joinpath(frame_record.name)
 
                     frame = Frame(id=frame_id, name=frame_record.name, data=frame_record.data, path=frame_path)
-                    frame.load_module()
+                    frame.load()
                     factory.add_frame(frame)
 
                 factories[factory.name] = factory
@@ -211,7 +239,7 @@ class Catalog:
             frame_path = factory_path.joinpath(version).joinpath("frames").joinpath(frame_name)
 
             frame = Frame(id=frame_id, name=frame_name, data=frame_record.data, path=frame_path)
-            frame.load_module()
+            frame.load()
             return frame
 
     def update_factory(self, factory_name: str, version: str, data: dict = None) -> bool:
@@ -256,7 +284,7 @@ class Catalog:
         for factory in factories.values():
             print(f"  {factory.name}:{factory.version}")
             print(f"    frames : {list(factory.frames.keys())}")
-            print(f"    enums  : {list(factory.enums.keys())}")
+            print(f"    maps   : {list(factory.maps.keys())}")
             print()
 
         print("=" * 52)

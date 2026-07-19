@@ -1,7 +1,9 @@
 from base.CatalogResource import CatalogResource
 from pathlib import Path
-from typing import Union
-from core.resources.Frame import Frame
+from typing import Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from core.resources.Frame import Frame
 
 class Factory(CatalogResource):
     def __init__(self, name: str, version: str, data: dict, path: Path):
@@ -38,12 +40,12 @@ class Factory(CatalogResource):
         return self.spec.get('description', '')
 
     @property
-    def frames(self) -> dict[str, Frame]:
+    def frames(self) -> dict[str, "Frame"]:
         return self.__frames
 
     @property
-    def enums(self) -> dict[str, list[str]]:
-        return self.spec.get('enums', {})
+    def maps(self) -> dict[str, list[str]]:
+        return self.spec.get('maps', {})
 
     @property
     def config(self) -> dict:
@@ -53,8 +55,8 @@ class Factory(CatalogResource):
     def lifecycle(self) -> dict:
         return self.spec.get('lifecycle', {})
 
-    def add_frame(self, frame: Frame):
+    def add_frame(self, frame: "Frame"):
         self.__frames[frame.name] = frame
 
-    def get_frame(self, frame_name: str) -> Union[Frame, None]:
+    def get_frame(self, frame_name: str) -> Union["Frame", None]:
         return self.__frames.get(frame_name, None)

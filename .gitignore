@@ -1,0 +1,39 @@
+# Python bytecode / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Runtime data (SQLite DB is mutated on every run, not source)
+data/*.db
+data/*.sqlite3
+
+# Logs
+*.log
+app.log
+
+# Generated project output (created by the factory/codegen tool)
+workspace/projects/*
+
+# Env / secrets
+.env
+.env.*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# OS cruft
+.DS_Store
+Thumbs.db

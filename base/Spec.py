@@ -1,7 +1,9 @@
 from base.Schema import Schema
-from base.types.Enum import Enum
-from base.types.DataType import DataType
-from typing import Callable, Dict, Any, Union
+from base.types.Map import Map
+from base.types.BindingType import BindingType
+from base.Binding import Binding
+from base.types.DataType import DataType, DecodingError
+from typing import Callable, Dict, Any, Union, List
 from utils.helpers import asjson, asyaml, jsonpath, save_json, save_yaml, load_json, load_yaml
 
 class Attribute:
@@ -11,33 +13,47 @@ class Attribute:
         self.__path = path
         self.__schema_path = schema_path
         
-        self.key = key
-        self.value = value
-        self.type = type
-        self.default = default
+        self.key: str = key
+        self.value: any = value
+        self.type: str = type
+        self.default: any = default
+
+    @classmethod
+    def from_schema_path(cls, key: str, value: any, schema: Schema, path: Union[str, None], schema_path: str):
+        _type = schema.get(f'{schema_path}.type', None)
+        _default = schema.get(f'{schema_path}.default', Attribute.NO_DEFAULT)
+
+        if _type is None:
+            try:
+                _type = schema.jsonpath(f'{schema_path}.type')
+            except Exception as e:
+                pass
+
+        return cls(path=path, schema_path=schema_path, key=key, value=value, type=_type, default=_default)
+
 
     @property
-    def path(self):
+    def path(self) -> Union[str, None]:
         return self.__path
 
     @property
-    def schema_path(self):
+    def schema_path(self) -> Union[str, None]:
         return self.__schema_path
 
-    def asdict(self):
+    def asdict(self) -> dict:
         return {
             "path": self.__path,
             "schema_path": self.__schema_path,
             "key": self.key,
             "value": self.value,
             "type": self.type,
-            "default": self.default
+            "default": self.default if self.default is not Attribute.NO_DEFAULT else None
         }
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.key}: {self.type} = {self.value}'
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'{self.key}: {self.type} = {self.value}'
 
 class Spec:
@@ -64,23 +80,23 @@ class Spec:
         jsonschema = load_yaml(filepath)
         self.validate(jsonschema)
 
-    def define_enum(self, name: str, items: Dict[str, Any] = {}):
-        self.__schema.define_type(Enum(f"enum.{name}", items))
+    def define_map(self, name: str, items: Dict[str, Any] = {}):
+        self.__schema.define_type(Map(name, items))
+
+    def define_binding(self, dest_object: Any, name: str, bindings: List[Binding]):
+        self.__schema.define_type(BindingType(dest_object, name, bindings))
 
     def jsonpath(self, attribute_path: str):
         return jsonpath(self.__data, attribute_path)
 
-    def __apply(self, attribute: Any, func: Callable[[Attribute], Any]):
+    def __apply(self, attribute: Any, func: Callable[[Attribute], Any]) -> dict | list:
         if isinstance(attribute.value, dict):
             result = {}
             for key, value in attribute.value.items():
                 child_path = f'{attribute.path}.{key}'
                 child_schema_path = f'{attribute.schema_path}.properties.{key}'
-                child_type = self.__schema[f'{child_schema_path}.type']
-                child_default = self.__schema.get(f'{child_schema_path}.default', Attribute.NO_DEFAULT)
-
-                child_attribute = Attribute(path=child_path, schema_path=child_schema_path, key=key, value=value, type=child_type, default=child_default)
-
+                child_attribute = Attribute.from_schema_path(key, value, self.__schema, child_path, child_schema_path)
+                
                 result[key] = self.__apply(child_attribute, func)
 
             return result
@@ -89,10 +105,7 @@ class Spec:
             for index, item in enumerate(attribute.value):
                 child_path = f'{attribute.path}[{index}]'
                 child_schema_path = f'{attribute.schema_path}.items'
-                child_type = self.__schema[f'{child_schema_path}.type']
-                child_default = self.__schema.get(f'{child_schema_path}.default', Attribute.NO_DEFAULT)
-
-                child_attribute = Attribute(path=child_path, schema_path=child_schema_path, key=item, value=item, type=child_type, default=child_default)
+                child_attribute = Attribute.from_schema_path(item, item, self.__schema, child_path, child_schema_path)
 
                 result.append(self.__apply(child_attribute, func))
 
@@ -100,41 +113,50 @@ class Spec:
         else:
             return func(attribute)
 
-    def apply(self, func: Callable[[Attribute], Any]):
+    def apply(self, func: Callable[[Attribute], Any]) -> dict | list:
         result = {} if isinstance(self.__data, dict) else []
         root = self.__data
         if isinstance(root, dict):
             for key, value in root.items():
                 child_path = f'{key}'
                 child_schema_path = f'properties.{key}'
-                child_type = self.__schema[f'{child_schema_path}.type']
-                child_default = self.__schema.get(f'{child_schema_path}.default', Attribute.NO_DEFAULT)
-
-                child_attribute = Attribute(path=child_path, schema_path=child_schema_path, key=key, value=value, type=child_type, default=child_default)
+                child_attribute = Attribute.from_schema_path(key, value, self.__schema, child_path, child_schema_path)
 
                 result[key] = self.__apply(child_attribute, func)
         elif isinstance(root, list):
             for index, item in enumerate(root):
                 child_path = f'[{index}]'
                 child_schema_path = 'items'
-                child_type = self.__schema[f'{child_schema_path}.type']
-                child_default = self.__schema.get(f'{child_schema_path}.default', Attribute.NO_DEFAULT)
-                
-                child_attribute = Attribute(path=child_path, schema_path=child_schema_path, key=item, value=item, type=child_type, default=child_default)
+                child_attribute = Attribute.from_schema_path(item, item, self.__schema, child_path, child_schema_path)
 
                 result.append(self.__apply(child_attribute, func))
 
-        self.__data = result
-        return self.__data
+        return result
 
-    def decode(self):
+    def decode(self) -> "Spec":
         def type_decode(attribute):
-            decoder = DataType.DECODERS.get(attribute.type, None)
-            new_value = decoder(attribute.value) if decoder is not None else attribute.value
-            return new_value
-        
-        self.apply(type_decode)
-        return self.__data
+            types: list[str] = attribute.type if isinstance(attribute.type, list) else [attribute.type]
+            tried: bool = False
+            errors: list[str] = []
+
+            for _type in types:
+                decoder = DataType.DECODERS.get(_type, None)
+                if not decoder:
+                    continue
+
+                tried = True
+                try:
+                    return decoder(attribute.value)
+                except DecodingError as e:
+                    errors.append(f"decoding failed for type '{_type}': {e.message}")
+            
+            
+            if tried:
+                error_message = "\n    - " + "\n    - ".join(errors) if len(errors) > 1 else errors[0]
+                raise DecodingError(error_message)     
+            return attribute.value
+           
+        return Spec(self.apply(type_decode))
 
     def asjson(self):
         return asjson(self.__data)

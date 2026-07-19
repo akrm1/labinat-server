@@ -1,7 +1,8 @@
 from abc import ABC
 from base.Spec import Spec
 from utils.helpers import asjson, asyaml
-from typing import Dict, Any
+from typing import Dict, Any, List
+from base.Binding import Binding
 
 
 class Resource(ABC):
@@ -16,8 +17,11 @@ class Resource(ABC):
     def validate(self, jsonschema: dict):
         self.__spec.validate(jsonschema)
 
-    def define_enum(self, name: str, items: Dict[str, Any]):
-        self.__spec.define_enum(name, items)
+    def define_map(self, name: str, items: Dict[str, Any]):
+        self.__spec.define_map(name, items)
+
+    def define_binding(self, dest_object: Any, name: str, bindings: List[Binding]):
+        self.__spec.define_binding(dest_object, name, bindings)
 
     @property
     def id(self):
