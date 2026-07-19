@@ -209,6 +209,7 @@ class Workspace:
         return blocks
 
 
+
     def summary(self, catalog: Catalog):
         projects = self.get_all_projects(catalog)
 
