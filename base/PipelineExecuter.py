@@ -1,4 +1,3 @@
-import server
 from utils import os
 from pathlib import Path
 from typing import Union
@@ -28,6 +27,10 @@ class PipelineExecuter:
                 self.add_action(name, cmd)
 
     def __execute(self, cwd: Union[str, Path] = None, **inputs):
+        # Imported lazily: `server` transitively imports `core.Workspace` -> `core.Project`,
+        # which imports this module at load time, so a top-level import here would be circular.
+        import server
+
         if len(self.__actions) == 0:
             return
         

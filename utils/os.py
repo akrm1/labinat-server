@@ -1,4 +1,3 @@
-import server
 import subprocess
 from pathlib import Path
 from typing import Union
@@ -8,6 +7,10 @@ import os
 
 
 def execute(cmd: str, inputs: dict = None, cwd: Union[str, Path] = None):
+    # Imported lazily: `server` transitively imports `core.Workspace` -> `core.Project`
+    # -> `base.PipelineExecuter` -> here, so a top-level import here would be circular.
+    import server
+
     if inputs:
         cmd = Template(cmd).render(**inputs)
 

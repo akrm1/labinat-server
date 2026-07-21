@@ -1,6 +1,5 @@
 from typing import Union
 from pathlib import Path
-import importlib.util
 import inspect
 from types import ModuleType
 
@@ -8,10 +7,18 @@ class RuntimeModule():
     def __init__(self, module_name: str, path: Union[str, Path]):
         self.module_name : str = module_name
         self.path : Path = Path(path)
-        
-        spec = importlib.util.spec_from_file_location(self.module_name, self.path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+
+        # Compiled/exec'd directly from source (instead of going through
+        # importlib.util.spec_from_file_location's SourceFileLoader) so every
+        # RuntimeModule always reflects the file's current on-disk content.
+        # The importlib loader caches compiled bytecode in __pycache__ keyed
+        # by the source's mtime; frame modules can be rewritten and reloaded
+        # (see Frame.reload) faster than the filesystem's mtime resolution,
+        # which made reloads silently return stale module contents.
+        source = self.path.read_text(encoding="utf-8")
+        module = ModuleType(self.module_name)
+        module.__file__ = str(self.path)
+        exec(compile(source, str(self.path), "exec"), module.__dict__)
 
         self.__module : ModuleType = module
 

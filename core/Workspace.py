@@ -7,12 +7,14 @@ from utils.helpers import asjson
 from core.Catalog import Catalog
 from core.Project import Project
 from core.resources.Factory import Factory
+from core.resources.Frame import Frame
 from core.resources.Block import Block
 from data.database import get_db
 from sqlalchemy import and_
 from data.models.ProjectModel import ProjectModel
 from data.models.ProjectFactoryModel import ProjectFactoryModel
 from data.models.FactoryModel import FactoryModel
+from data.models.FrameModel import FrameModel
 from data.models.BlockModel import BlockModel
 
 class Workspace:
@@ -33,6 +35,21 @@ class Workspace:
 
     def get_project_path(self, project_id: str) -> Path:
         return self.path.joinpath("projects").joinpath(project_id)
+
+    def __load_factory(self, db, catalog: Catalog, factory_record: FactoryModel) -> Factory:
+        factory_path = catalog.get_factory_path(factory_record.name)
+        factory = Factory(name=factory_record.name, version=factory_record.version, data=factory_record.data, path=factory_path)
+
+        frame_records = db.query(FrameModel).filter_by(factory=factory_record.name, factory_version=factory_record.version).all()
+        for frame_record in frame_records:
+            frame_id = f'{factory.id}.{frame_record.name}'
+            frame_path = factory.version_path.joinpath("frames").joinpath(frame_record.name)
+
+            frame = Frame(id=frame_id, name=frame_record.name, data=frame_record.data, path=frame_path)
+            frame.load()
+            factory.add_frame(frame)
+
+        return factory
 
     def create_project(self, name: str, description: str = "", config: dict = {}, factories: list[Factory] = []) -> Project:
         project_id = str(uuid.uuid4())
@@ -123,8 +140,7 @@ class Workspace:
 
             factories_records = db.query(FactoryModel).join(ProjectFactoryModel, and_(FactoryModel.name == ProjectFactoryModel.factory, FactoryModel.version == ProjectFactoryModel.factory_version)).filter(ProjectFactoryModel.project_id == project_id).all()
             for factory_record in factories_records:
-                factory_path = catalog.get_factory_path(factory_record.name)
-                factory = Factory(name=factory_record.name, version=factory_record.version, data=factory_record.data, path=factory_path)
+                factory = self.__load_factory(db, catalog, factory_record)
                 project.add_factory(factory)
 
             blocks_records = db.query(BlockModel).filter_by(project_id=project_id).all()
@@ -148,8 +164,7 @@ class Workspace:
 
                 factories_records = db.query(FactoryModel).join(ProjectFactoryModel, and_(FactoryModel.name == ProjectFactoryModel.factory, FactoryModel.version == ProjectFactoryModel.factory_version)).filter(ProjectFactoryModel.project_id == project.id).all()
                 for factory_record in factories_records:
-                    factory_path = catalog.get_factory_path(factory_record.name)
-                    factory = Factory(name=factory_record.name, version=factory_record.version, data=factory_record.data, path=factory_path)
+                    factory = self.__load_factory(db, catalog, factory_record)
                     project.add_factory(factory)
 
                 blocks_records = db.query(BlockModel).filter_by(project_id=project.id).all()
@@ -167,9 +182,11 @@ class Workspace:
     def create_block(self, project: Project, frame_id: str, block_name: str, data: dict) -> Union[Block, None]:
         factory_name, frame_name = frame_id.split(".")
         factory = project.get_factory(factory_name)
-        frame = factory.get_frame(frame_name)
+        if not factory:
+            return None
 
-        if not factory or not frame:
+        frame = factory.get_frame(frame_name)
+        if not frame:
             return None
 
         block = Block(frame=frame, name=block_name, data=data)

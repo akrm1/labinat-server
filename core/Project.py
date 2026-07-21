@@ -40,7 +40,7 @@ class Project():
             "required": ["app"]
         }
 
-        for factory_name, factory in self.__factories.items():
+        for factory_name, factory in self.factories.items():
             schema["properties"][factory_name] = {
                 "type": "object",
                 "additionalProperties": False,

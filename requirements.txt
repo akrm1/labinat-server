@@ -3,3 +3,4 @@ jsonpath-ng==1.8.0
 jsonschema==4.26.0
 PyYAML==6.0.3
 SQLAlchemy==2.0.51
+pytest==9.1.1

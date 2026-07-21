@@ -66,9 +66,9 @@ class Spec:
         return self.__schema.types
 
     def validate(self, jsonschema: dict):
-        if not self.__data or not jsonschema:
+        if not jsonschema:
             return
-        
+
         self.__schema.set_jsonschema(jsonschema)
         self.__schema.validate(self.__data)
 

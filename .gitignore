@@ -14,6 +14,11 @@ build/
 dist/
 *.egg-info/
 
+# Test tooling artifacts (the tests themselves ARE committed, just not these)
+.pytest_cache/
+.coverage
+htmlcov/
+
 # Runtime data (SQLite DB is mutated on every run, not source)
 data/*.db
 data/*.sqlite3

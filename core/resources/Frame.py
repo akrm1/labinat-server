@@ -51,10 +51,10 @@ class Frame(CatalogResource):
 
     def create_concrete(self, name: str, extension: str, content: str, is_template: bool = True):
         concretes_dir= self.path.joinpath("concretes")
-        concrete = Concrete(concretes_path=concretes_dir, name=name, extension=extension, content=content, is_template=is_template)
+        concrete = Concrete(concretes_path=concretes_dir, name=name, extension=extension, content=content, as_template=is_template)
 
-        concrete.path.touch()
-        concrete.path.write_text(content)
+        concrete.src.touch()
+        concrete.src.write_text(content)
         self.__concretes[name] = concrete
     
     def load_module(self):
