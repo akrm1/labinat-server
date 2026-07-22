@@ -1,12 +1,18 @@
-from base.Schema import Schema
+"""Spec: validated JSON documents with custom type registration and decode."""
+
+from base.Schema import Schema, FailureError
 from base.types.Map import Map
 from base.types.BindingType import BindingType
 from base.Binding import Binding
 from base.types.DataType import DataType, DecodingError
 from typing import Callable, Dict, Any, Union, List
 from utils.helpers import asjson, asyaml, jsonpath, save_json, save_yaml, load_json, load_yaml
+from utils import logger
+
 
 class Attribute:
+    """One leaf (or container node) discovered while walking Spec data against a schema."""
+
     NO_DEFAULT = object()
 
     def __init__(self, path: Union[str, None], schema_path: Union[str, None], key: str, value: any, type: str, default: any = NO_DEFAULT):
@@ -20,13 +26,14 @@ class Attribute:
 
     @classmethod
     def from_schema_path(cls, key: str, value: any, schema: Schema, path: Union[str, None], schema_path: str):
+        """Build an Attribute by resolving `type`/`default` from the schema path."""
         _type = schema.get(f'{schema_path}.type', None)
         _default = schema.get(f'{schema_path}.default', Attribute.NO_DEFAULT)
 
         if _type is None:
             try:
                 _type = schema.jsonpath(f'{schema_path}.type')
-            except Exception as e:
+            except Exception:
                 pass
 
         return cls(path=path, schema_path=schema_path, key=key, value=value, type=_type, default=_default)
@@ -56,7 +63,13 @@ class Attribute:
     def __repr__(self) -> str:
         return f'{self.key}: {self.type} = {self.value}'
 
+
 class Spec:
+    """Validated, decodable JSON document with optional custom DataTypes.
+
+    Used as the data backbone for every Resource (factory/frame/block/config).
+    """
+
     def __init__(self, data: Union[dict, list]):
         self.__data = data
         self.__schema = Schema(None)
@@ -66,24 +79,38 @@ class Spec:
         return self.__schema.types
 
     def validate(self, jsonschema: dict):
+        """Validate `self.data` against `jsonschema`. No-ops if schema is empty."""
         if not jsonschema:
+            logger.debug("Spec.validate skipped: empty schema")
             return
 
+        logger.debug("Spec validating")
         self.__schema.set_jsonschema(jsonschema)
-        self.__schema.validate(self.__data)
+        try:
+            self.__schema.validate(self.__data)
+        except FailureError as e:
+            logger.warning("Spec validation failed", error=str(e))
+            raise
+        logger.debug("Spec validation passed")
 
     def validate_from_json(self, filepath: str):
+        """Load a JSON schema file and validate against it."""
         jsonschema = load_json(filepath)
         self.validate(jsonschema)
 
     def validate_from_yaml(self, filepath: str):
+        """Load a YAML schema file and validate against it."""
         jsonschema = load_yaml(filepath)
         self.validate(jsonschema)
 
     def define_map(self, name: str, items: Dict[str, Any] = {}):
+        """Register a Map data type as `map.<name>`."""
+        logger.debug("Spec defining map", map=name)
         self.__schema.define_type(Map(name, items))
 
     def define_binding(self, dest_object: Any, name: str, bindings: List[Binding]):
+        """Register a BindingType as `binding.<name>` for `dest_object`."""
+        logger.debug("Spec defining binding", binding=name)
         self.__schema.define_type(BindingType(dest_object, name, bindings))
 
     def jsonpath(self, attribute_path: str):
@@ -114,6 +141,7 @@ class Spec:
             return func(attribute)
 
     def apply(self, func: Callable[[Attribute], Any]) -> dict | list:
+        """Walk the data tree and apply `func` to every leaf Attribute."""
         result = {} if isinstance(self.__data, dict) else []
         root = self.__data
         if isinstance(root, dict):
@@ -134,6 +162,9 @@ class Spec:
         return result
 
     def decode(self) -> "Spec":
+        """Return a new Spec with custom types decoded (maps, bindings, etc.)."""
+        logger.debug("Spec decoding")
+
         def type_decode(attribute):
             types: list[str] = attribute.type if isinstance(attribute.type, list) else [attribute.type]
             tried: bool = False
@@ -153,10 +184,13 @@ class Spec:
             
             if tried:
                 error_message = "\n    - " + "\n    - ".join(errors) if len(errors) > 1 else errors[0]
+                logger.error("Spec decode failed", path=attribute.path, error=error_message)
                 raise DecodingError(error_message)     
             return attribute.value
            
-        return Spec(self.apply(type_decode))
+        decoded = Spec(self.apply(type_decode))
+        logger.debug("Spec decode finished")
+        return decoded
 
     def asjson(self):
         return asjson(self.__data)

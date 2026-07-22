@@ -1,13 +1,24 @@
+"""Schema type for `@object.attr` binding expressions (`binding.<type>`)."""
+
 from typing import Callable, Any, Dict, List
 from base.types.DataType import DataType, DecodingError
 from base.Binding import Binding
 
 
 class BindingException(DecodingError):
+    """Raised when a binding expression cannot be resolved."""
+
     def __init__(self, message: str):
         super().__init__(message)
 
+
 class BindingType(DataType):
+    """Validates and decodes `@binding_object.attr` strings against registered bindings.
+
+    Registered as `binding.<binding_type>` so frames can declare fields that
+    resolve to callables/values on a destination object (e.g. a project).
+    """
+
     def __init__(self, dest_object: Any, binding_type: str, bindings: List[Binding]):
         name = f"binding.{binding_type}"
         super().__init__(name)

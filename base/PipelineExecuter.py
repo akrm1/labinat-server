@@ -1,8 +1,18 @@
+"""Execute a named sequence of shell lifecycle actions for a factory."""
+
 from utils import os
+from utils import logger
 from pathlib import Path
 from typing import Union
 
+
 class PipelineExecuter:
+    """Runs factory lifecycle steps (`build`, `rebuild`, …) as shell commands.
+
+    Each action is `{name, cmd}`; `cmd` may be a Jinja template filled from
+    the project/factory context passed into `__call__`.
+    """
+
     def __init__(self, name: str, actions: list[dict] = []):
         self.__name: str = name
         self.update_actions(actions)
@@ -12,12 +22,14 @@ class PipelineExecuter:
         return self.__name
 
     def add_action(self, name: str, cmd: str):
+        """Append one named shell action to this pipeline."""
         self.__actions.append({
             "name": name,
             "cmd": cmd
         })
 
     def update_actions(self, actions: list[dict]):
+        """Replace the action list, keeping only entries with both name and cmd."""
         self.__actions = []
         for action in actions:
             name = action.get("name", None)
@@ -27,32 +39,41 @@ class PipelineExecuter:
                 self.add_action(name, cmd)
 
     def __execute(self, cwd: Union[str, Path] = None, **inputs):
-        # Imported lazily: `server` transitively imports `core.Workspace` -> `core.Project`,
-        # which imports this module at load time, so a top-level import here would be circular.
-        import server
-
         if len(self.__actions) == 0:
+            logger.debug("Pipeline has no actions; skipping", pipeline=self.__name)
             return
         
         title = self.__name.capitalize()
-        return_code = 0
+        logger.info(
+            "Pipeline starting",
+            pipeline=self.__name,
+            actions=len(self.__actions),
+            cwd=str(cwd) if cwd else None,
+        )
 
         for action in self.__actions:
             name = action["name"]
             cmd = action["cmd"]
 
-            server.log(f"### {name} ...")
+            logger.info("Pipeline action starting", pipeline=self.__name, action=name)
             return_code = os.execute(cmd, inputs, cwd=cwd)
 
             if return_code != 0:
-                server.log(f"{title} Failed: issue occurred while executing \"{name}\": \'{cmd}\'", level="error")
+                logger.error(
+                    "Pipeline action failed",
+                    pipeline=self.__name,
+                    action=name,
+                    cmd=cmd,
+                    return_code=return_code,
+                )
                 return
             
-            server.log(f"------------------------------------------------")
+            logger.debug("Pipeline action finished", pipeline=self.__name, action=name)
         
-        server.log(f"** Successfully Execute \'{title}\' Operator **")
+        logger.info("Pipeline completed successfully", pipeline=title)
 
     def parameters(self, index: Union[int, str]) -> dict:
+        """Return Jinja parameter names referenced by an action cmd."""
         if isinstance(index, int):
             return os.get_parameters(self.__actions[index]["cmd"])
         elif isinstance(index, str):
@@ -61,6 +82,7 @@ class PipelineExecuter:
             raise ValueError(f"Invalid index: {index}")
     
     def __call__(self, cwd: Union[str, Path] = None, **inputs):
+        """Execute the pipeline with optional working directory and Jinja inputs."""
         return self.__execute(cwd=cwd, **inputs)
 
     def __str__(self):

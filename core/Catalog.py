@@ -1,7 +1,10 @@
+"""Catalog registry: factories and frames on disk + in SQLite."""
+
 from pathlib import Path
 import shutil
 from typing import Union
 from utils.helpers import asjson, load_json
+from utils import logger
 from data.database import get_db
 from data.models.FactoryModel import FactoryModel
 from data.models.FrameModel import FrameModel
@@ -11,8 +14,15 @@ from base.Template import Template
 
 
 class Catalog:
+    """Persistent registry of versioned factories and their frames.
+
+    CRUD mutates SQLite and the on-disk tree under `catalog/factories/`.
+    Lookups hydrate `Factory`/`Frame` objects and call `frame.load()`.
+    """
+
     def __init__(self, catalog_config: dict):
         self.__path: Path = Path(catalog_config['path'])
+        logger.debug("Catalog initialized", path=str(self.__path))
 
     @property
     def path(self) -> Path:
@@ -80,6 +90,7 @@ class Catalog:
 
     def create_factory(self, factory_name: str, factory_version: str, data: dict, frames: list[str]) -> Factory:
         factory_path = self.get_factory_path(factory_name)
+        logger.info("Creating factory", factory=factory_name, version=factory_version, frames=frames)
         with get_db() as db:
             factory_record = db.query(FactoryModel).filter_by(name=factory_name, version=factory_version).first()
             if factory_record:
@@ -104,6 +115,7 @@ class Catalog:
                     db.add(FrameModel(factory=factory.name, factory_version=factory.version, name=frame.name, data={}))
 
                     db.commit()
+                    logger.info("Factory already existed; added frames", factory=factory_name, version=factory_version, added=list(new_frames))
                     return factory
                 
 
@@ -131,6 +143,7 @@ class Catalog:
                 db.add(FrameModel(factory=factory.name, factory_version=factory.version, name=frame.name, data=frame.spec.data))
 
             db.commit()
+            logger.info("Factory created", factory=factory.id, frames=list(factory.frames.keys()))
 
         return factory
 
@@ -138,6 +151,7 @@ class Catalog:
         with get_db() as db:
             factory_record = db.query(FactoryModel).filter_by(name=factory_name, version=version).first()
             if not factory_record:
+                logger.warning("Create frame failed: factory not found", factory=factory_name, version=version, frame=frame_name)
                 return None
 
             factory_path = self.get_factory_path(factory_name)
@@ -153,6 +167,7 @@ class Catalog:
             frame.load()
             db.add(FrameModel(factory=factory_name, factory_version=version, name=frame.name, data=frame.spec.data))
             db.commit()
+            logger.info("Frame created", frame=frame.id)
 
             return frame
 
@@ -161,6 +176,7 @@ class Catalog:
         with get_db() as db:
             factory_record = db.query(FactoryModel).filter_by(name=factory_name, version=version).first()
             if not factory_record:
+                logger.warning("Delete factory failed: not found", factory=factory_name, version=version)
                 return False
 
             # delete frame records
@@ -169,12 +185,14 @@ class Catalog:
             db.commit()
 
             shutil.rmtree(factory_path)
+            logger.info("Factory version deleted", factory=factory_name, version=version)
             return True
 
     def delete_frame(self, factory_name: str, version: str, frame_name: str) -> bool:
         with get_db() as db:
             frame_record = db.query(FrameModel).filter_by(factory=factory_name, factory_version=version, name=frame_name).first()
             if not frame_record:
+                logger.warning("Delete frame failed: not found", factory=factory_name, version=version, frame=frame_name)
                 return False
 
             factory_path = self.get_factory_path(factory_name)
@@ -184,13 +202,16 @@ class Catalog:
             db.commit()
 
             shutil.rmtree(frame_path)
+            logger.info("Frame deleted", factory=factory_name, version=version, frame=frame_name)
             return True
 
     def get_factory(self, factory_name: str, version: str) -> Union[Factory, None]:
+        """Load a factory and its frames from the database, or None if missing."""
         factory_path = self.get_factory_path(factory_name)
         with get_db() as db:
             factory_record = db.query(FactoryModel).filter_by(name=factory_name, version=version).first()
             if not factory_record:
+                logger.warning("Factory not found", factory=factory_name, version=version)
                 return None
 
             frame_records = db.query(FrameModel).filter_by(factory=factory_name, factory_version=version).all()
@@ -204,9 +225,11 @@ class Catalog:
                 frame.load()
                 factory.add_frame(frame)
 
+            logger.debug("Factory loaded", factory=factory.id, frames=len(factory.frames))
             return factory
 
     def get_all_factories(self) -> dict[str, Factory]:
+        """Return all factories keyed by name (last version wins on name collision)."""
         factories = {}
 
         with get_db() as db:
@@ -226,13 +249,21 @@ class Catalog:
 
                 factories[factory.name] = factory
 
+        logger.debug("All factories loaded", count=len(factories))
         return factories
 
     def get_frame(self, factory_name: str, version: str, frame_name: str) -> Union[Frame, None]:
+        """Load a single frame from the database, or None if missing."""
         factory_path = self.get_factory_path(factory_name)
         with get_db() as db:
             frame_record = db.query(FrameModel).filter_by(factory=factory_name, factory_version=version, name=frame_name).first()
             if not frame_record:
+                logger.warning(
+                    "Frame not found",
+                    factory=factory_name,
+                    version=version,
+                    frame=frame_name,
+                )
                 return None
 
             frame_id = f'{factory_name}:{version}.{frame_name}'
@@ -240,13 +271,16 @@ class Catalog:
 
             frame = Frame(id=frame_id, name=frame_name, data=frame_record.data, path=frame_path)
             frame.load()
+            logger.debug("Frame loaded", frame=frame.id)
             return frame
 
     def update_factory(self, factory_name: str, version: str, data: dict = None) -> bool:
+        """Validate and persist factory Spec data. Returns False if not found."""
         factory_path = self.get_factory_path(factory_name)
         with get_db() as db:
             factory_record = db.query(FactoryModel).filter_by(name=factory_name, version=version).first()
             if not factory_record:
+                logger.warning("Update factory failed: not found", factory=factory_name, version=version)
                 return False
 
             data = data if data else factory_record.data
@@ -255,12 +289,20 @@ class Catalog:
             factory_record.data = factory.spec.data
 
             db.commit()
+            logger.info("Factory updated", factory=factory.id)
             return True
 
     def update_frame(self, factory_name: str, version: str, frame_name: str, data: dict = None) -> bool:
+        """Validate and persist frame Spec data. Returns False if not found."""
         with get_db() as db:
             frame_record = db.query(FrameModel).filter_by(factory=factory_name, factory_version=version, name=frame_name).first()
             if not frame_record:
+                logger.warning(
+                    "Update frame failed: not found",
+                    factory=factory_name,
+                    version=version,
+                    frame=frame_name,
+                )
                 return False
 
             factory_path = self.get_factory_path(factory_name)
@@ -273,6 +315,7 @@ class Catalog:
             frame_record.data = frame.spec.data
 
             db.commit()
+            logger.info("Frame updated", frame=frame.id)
             return True
 
 

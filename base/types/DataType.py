@@ -1,6 +1,13 @@
+"""Abstract custom schema types and the global decoder registry."""
+
 from abc import ABC, abstractmethod
 
+from utils import logger
+
+
 class DecodingError(Exception):
+    """Raised when a custom type cannot decode a validated value."""
+
     def __init__(self, message: str):
         self.__message = message
         super().__init__(self.__message)
@@ -9,11 +16,20 @@ class DecodingError(Exception):
     def message(self) -> str:
         return self.__message
 
+
 class DataType(ABC):
+    """Base for platform custom types (`map.*`, `binding.*`, …).
+
+    Construction registers `decode` under `name` in the class-level
+    `DECODERS` map used by `Schema` / `Spec` during validation and decode.
+    """
+
     DECODERS = {}
+
     def __init__(self, name: str):
         self.__name = name
         DataType.DECODERS[self.__name] = self.decode
+        logger.debug("Custom type registered", type=self.__name)
 
     @property
     def name(self) -> str:
@@ -21,14 +37,17 @@ class DataType(ABC):
 
     @abstractmethod
     def validate(self, value: any) -> bool:
+        """Return True if `value` is acceptable for this type."""
         pass
 
     @abstractmethod
     def invalid_msg(self, key: str, value: any, value_type: str) -> str:
+        """Human-readable validation failure message for a field."""
         pass
 
     @abstractmethod
     def decode(self, value: any) -> any:
+        """Convert a validated raw value into its runtime form."""
         pass
 
     def __str__(self) -> str:

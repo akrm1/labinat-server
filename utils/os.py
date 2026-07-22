@@ -4,27 +4,23 @@ from typing import Union
 from jinja2 import Template
 import re
 import os
+from utils import logger
 
 
 def execute(cmd: str, inputs: dict = None, cwd: Union[str, Path] = None):
-    # Imported lazily: `server` transitively imports `core.Workspace` -> `core.Project`
-    # -> `base.PipelineExecuter` -> here, so a top-level import here would be circular.
-    import server
-
     if inputs:
         cmd = Template(cmd).render(**inputs)
 
-    server.log(f"EXECUTE: {cmd}")
-    server.log(f"<***** START *****>")
+    logger.info("Shell execute", cmd=cmd, cwd=str(cwd) if cwd else None)
+    logger.debug("Shell output start")
     proc = subprocess.Popen(cmd, cwd=cwd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     for line in iter(proc.stdout.readline, ""):
-        server.log(line.rstrip())
+        logger.debug(line.rstrip())
     proc.wait()
     if proc.returncode != 0:
-        server.log(f"Error: {cmd}", level="error")
-    
-    server.log(f"Return Code: {proc.returncode}")
-    server.log(f"<***** END *****>")
+        logger.error("Shell command failed", cmd=cmd, return_code=proc.returncode)
+    else:
+        logger.debug("Shell command succeeded", return_code=proc.returncode)
     return proc.returncode
 
 def get_parameters(cmd: str) -> dict:

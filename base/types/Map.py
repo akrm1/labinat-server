@@ -1,8 +1,12 @@
+"""Named key→value maps used as custom schema types (`map.<name>`)."""
+
 from typing import Dict, Any
 from base.types.DataType import DataType
 
 
 class Map(DataType):
+    """Closed set of allowed keys that decode to associated values."""
+
     def __init__(self, name: str, items: Dict[str, Any] = {}):
         name = f'map.{name}'
         super().__init__(name)

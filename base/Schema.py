@@ -1,9 +1,12 @@
+"""JSON Schema validation with Labinat custom DataType checkers."""
+
 from typing import Type, Union
 from jsonschema.validators import extend
 import jsonschema as schema_engine
 from jsonschema.exceptions import UnknownType
 from base.types.DataType import DataType
 from utils.helpers import flatten_dict, jsonpath
+from utils import logger
 
 PRIMITIVE_TYPE_MAP = {
     int: "integer",
@@ -16,6 +19,8 @@ PRIMITIVE_TYPE_MAP = {
 }
 
 class FailureError(Exception):
+    """Base class for schema validation failures raised by Schema.validate."""
+
     def __init__(self, message: str):
         super().__init__(message)
 
@@ -36,10 +41,14 @@ class FailureError(Exception):
 
 
 class UndefinedTypeError(FailureError):
+    """Raised when a schema references a type name that was never registered."""
+
     def __init__(self, type: str):
         super().__init__(f"Type \'{type}\'is not defined")
 
 class ValidationError(FailureError):
+    """Raised when a value does not match its declared schema type(s)."""
+
     def __init__(self, key: str, value: any, expected_type: Union[DataType, str, list[DataType]], path: str, is_primitive: bool = False):
         jsonpath = self.get_jsonpath(path)
         message = f"Invalid value for '{jsonpath}'\n  "
@@ -64,11 +73,15 @@ class ValidationError(FailureError):
 
 
 class MissingKeyError(FailureError):
+    """Raised when a required field is absent from the validated document."""
+
     def __init__(self, key: str, path: str):
         jsonpath = self.get_jsonpath(path)
         super().__init__(f"Missing required field \'{key}\' at {jsonpath}")
 
 class Schema:
+    """JSON Schema validator with Labinat custom DataType checkers plugged in."""
+
     def __init__(self, jsonschema: dict):
         self.__types: dict[str, DataType] = {}
         self.set_jsonschema(jsonschema)
@@ -82,11 +95,14 @@ class Schema:
         return self.__flat
 
     def set_jsonschema(self, jsonschema: dict):
+        """Replace the underlying JSON Schema document and rebuild the flat index."""
         self.__jsonschema = jsonschema
-        self.__flat = flatten_dict(jsonschema)
+        self.__flat = flatten_dict(jsonschema) if jsonschema else {}
 
     def define_type(self, new_type: DataType):
+        """Register a custom DataType (e.g. map.status, binding.table)."""
         self.__types[new_type.name] = new_type
+        logger.debug("Schema type registered", type=new_type.name)
 
     def __new_type_checker(self, type: DataType):
         def checker(checker, instance):
@@ -101,7 +117,12 @@ class Schema:
         validator = extend(schema_engine.Draft7Validator, type_checker=custom_checker)
         return validator
 
-    def validate(self, data: dict):        
+    def validate(self, data: dict):
+        """Validate `data` against the configured JSON Schema.
+
+        Raises MissingKeyError / ValidationError / UndefinedTypeError on failure.
+        """
+        logger.debug("Schema validating", custom_types=list(self.__types.keys()))
         validator = self.__extend()
             
         try:
@@ -111,22 +132,33 @@ class Schema:
 
             if key == "required":
                 missing_field = e.message.split("'")[1]
-                raise MissingKeyError(missing_field, e.absolute_path) from None
+                err = MissingKeyError(missing_field, e.absolute_path)
+                logger.warning("Schema missing required field", field=missing_field)
+                raise err from None
             
             expected_type_value = e.validator_value
             value = e.instance
 
             if isinstance(expected_type_value, list):
                 expected_types = [self.__types.get(type_name, type_name) for type_name in expected_type_value]
-                raise ValidationError(key, value, expected_types, e.absolute_path) from None
+                err = ValidationError(key, value, expected_types, e.absolute_path)
+                logger.warning("Schema type validation failed", expected=expected_type_value)
+                raise err from None
 
             expected_type = self.__types.get(expected_type_value, None)            
             if expected_type is None:
-                raise ValidationError(key, value, expected_type_value, e.absolute_path, is_primitive=True) from None
+                err = ValidationError(key, value, expected_type_value, e.absolute_path, is_primitive=True)
+                logger.warning("Schema primitive type validation failed", expected=expected_type_value)
+                raise err from None
             
-            raise ValidationError(key, value, expected_type, e.absolute_path) from None
+            err = ValidationError(key, value, expected_type, e.absolute_path)
+            logger.warning("Schema custom type validation failed", expected=expected_type_value)
+            raise err from None
         except UnknownType as e:
+            logger.error("Schema undefined type", type=e.type)
             raise UndefinedTypeError(e.type) from None
+
+        logger.debug("Schema validation passed")
 
 
     def jsonpath(self, path: str):

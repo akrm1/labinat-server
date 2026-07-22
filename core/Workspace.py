@@ -1,9 +1,12 @@
+"""Workspace registry: projects and blocks on disk + in SQLite."""
+
 from pathlib import Path
 from typing import Union
 import uuid
 import shutil
 from datetime import datetime, timezone
 from utils.helpers import asjson
+from utils import logger
 from core.Catalog import Catalog
 from core.Project import Project
 from core.resources.Factory import Factory
@@ -17,9 +20,17 @@ from data.models.FactoryModel import FactoryModel
 from data.models.FrameModel import FrameModel
 from data.models.BlockModel import BlockModel
 
+
 class Workspace:
+    """Persistent registry of projects and their blocks.
+
+    CRUD mutates SQLite and the on-disk tree under `workspace/projects/`.
+    Lookups hydrate `Project` objects with attached factories and blocks.
+    """
+
     def __init__(self, workspace_config: dict):
         self.__path = Path(workspace_config['path'])
+        logger.debug("Workspace initialized", path=str(self.__path))
 
     @property
     def path(self):
@@ -78,12 +89,19 @@ class Workspace:
                 project.add_factory(factory)
             
             db.commit()
+            logger.info(
+                "Project created",
+                project_id=project.id,
+                name=name,
+                factories=[f.name for f in factories],
+            )
             return project
 
     def add_factory_to_project(self, project_id: str, factory: Factory) -> bool:
         with get_db() as db:
             project_record = db.query(ProjectModel).filter_by(id=project_id).first()
             if not project_record:
+                logger.warning("Add factory failed: project not found", project_id=project_id)
                 return False
             
             project_path = self.get_project_path(project_id)
@@ -95,6 +113,7 @@ class Workspace:
             project.add_factory(factory)
 
             db.commit()
+            logger.info("Factory added to project", project_id=project_id, factory=factory.id)
 
             return True
 
@@ -102,6 +121,7 @@ class Workspace:
         with get_db() as db:
             project_record = db.query(ProjectModel).filter_by(id=project_id).first()
             if not project_record:
+                logger.warning("Delete project failed: not found", project_id=project_id)
                 return False
             
             project_path = self.get_project_path(project_id)
@@ -111,12 +131,15 @@ class Workspace:
             db.query(ProjectFactoryModel).filter_by(project_id=project_id).delete()
             db.delete(project_record)
             db.commit()
+            logger.info("Project deleted", project_id=project_id)
             
             return True
 
     def delete_all_projects(self) -> bool:
+        """Delete every project record and on-disk tree."""
         with get_db() as db:
             projects_records = db.query(ProjectModel).all()
+            count = len(projects_records)
             for project_record in projects_records:
                 project_path = self.get_project_path(project_record.id)
                 shutil.rmtree(project_path)
@@ -127,12 +150,15 @@ class Workspace:
             
             db.commit()
 
+        logger.info("All projects deleted", count=count)
         return True
 
     def get_project(self, project_id: str, catalog: Catalog) -> Union[Project, None]:
+        """Hydrate a project with factories and blocks, or None if missing."""
         with get_db() as db:
             project_record = db.query(ProjectModel).filter_by(id=project_id).first()
             if not project_record:
+                logger.warning("Project not found", project_id=project_id)
                 return None
             
             project_path = self.get_project_path(project_id)
@@ -151,9 +177,16 @@ class Workspace:
                 block.load(project, factory)
                 project.add_block(block)
             
+            logger.debug(
+                "Project loaded",
+                project_id=project.id,
+                factories=len(project.factories),
+                blocks=len(project.blocks),
+            )
             return project
 
     def get_all_projects(self, catalog: Catalog) -> dict[str, Project]:
+        """Return all projects keyed by id, each fully hydrated."""
         projects = {}
 
         with get_db() as db:
@@ -177,16 +210,19 @@ class Workspace:
                 
                 projects[project_record.id] = project
 
+            logger.debug("All projects loaded", count=len(projects))
             return projects
 
     def create_block(self, project: Project, frame_id: str, block_name: str, data: dict) -> Union[Block, None]:
         factory_name, frame_name = frame_id.split(".")
         factory = project.get_factory(factory_name)
         if not factory:
+            logger.warning("Create block failed: factory not found", project_id=project.id, frame_id=frame_id)
             return None
 
         frame = factory.get_frame(frame_name)
         if not frame:
+            logger.warning("Create block failed: frame not found", project_id=project.id, frame_id=frame_id)
             return None
 
         block = Block(frame=frame, name=block_name, data=data)
@@ -198,12 +234,14 @@ class Workspace:
             db.add(block_record)
             db.commit()
 
+        logger.info("Block created", project_id=project.id, block=block.id, frame=frame_id)
         return block
 
     def delete_blocks(self, project: Project, blocks_names: list[str]) -> bool:
         with get_db() as db:
             db.query(BlockModel).filter(BlockModel.project_id == project.id, BlockModel.name.in_(blocks_names)).delete()
             db.commit()
+            logger.info("Blocks deleted", project_id=project.id, blocks=blocks_names)
 
             return True
 
