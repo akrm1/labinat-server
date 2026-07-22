@@ -1,4 +1,4 @@
-"""In-memory project: factories, blocks, config, clone, and lifecycle pipelines."""
+"""In-memory project: factories, blocks, config, clone, and named pipelines."""
 
 from pathlib import Path
 from datetime import datetime
@@ -19,8 +19,10 @@ class Project():
     """Workspace project instance: attached factories, blocks, and config Spec.
 
     Disk layout lives under `workspace/projects/<id>/`. `clone()` renders each
-    factory's `base/` templates into `src/<factory>/`; `build()` runs lifecycle
-    pipelines declared on attached factories.
+    factory's `base/` templates into `src/<factory>/`. `build()` orchestrates
+    validate → clone → init → emit blocks → build pipeline. Other pipeline
+    methods (`init`, `run`, `debug`, `release`) run optional shell sequences
+    with cwd set to `src/<factory>`.
     """
 
     def __init__(self, id: str, name: str, path: Path, created_at: datetime, description: str = "", config: dict = {}):
@@ -82,14 +84,39 @@ class Project():
             logger.debug("Project factory not found", project_id=self.__id, factory=factory_name)
         return factory
 
-    def add_block(self, block: "Block"):
-        """Register a block under this project (keyed by block name)."""
+    def add_block(self, block: "Block") -> bool:
+        """Register a block under this project (keyed by block name).
+
+        Returns False unless the block's frame belongs to an already-attached
+        factory (`frame.id` = `{factory.id}.{frame_name}`).
+        """
+        factory = self.__factory_from_frame(block.frame)
+        if factory is None:
+            logger.warning(
+                "Failed to add block: factory not found",
+                project_id=self.__id,
+                block=getattr(block, "id", getattr(block, "name", None)),
+                frame=block.frame.id,
+            )
+            return False
+
+        self.__blocks[block.name] = block
         logger.debug(
             "Project adding block",
             project_id=self.__id,
             block=getattr(block, "id", getattr(block, "name", None)),
+            factory=factory.id,
         )
-        self.__blocks[block.name] = block
+        return True
+
+    def remove_block(self, block_name: str) -> bool:
+        """Unregister a block by name. Returns True if it was present."""
+        removed = self.__blocks.pop(block_name, None)
+        if removed is None:
+            logger.debug("Project remove_block: not found", project_id=self.__id, block=block_name)
+            return False
+        logger.debug("Project block removed", project_id=self.__id, block=block_name)
+        return True
 
     def get_block(self, block_name: str) -> "Block":
         """Return a block by name, or None."""
@@ -104,6 +131,25 @@ class Project():
         if block:
             return block.frame.name
         return None
+
+    def get_block_factory(self, block_name: str) -> Union["Factory", None]:
+        """Return the attached factory that owns this block's frame, or None."""
+        block = self.__blocks.get(block_name, None)
+        if block is None:
+            return None
+        return self.__factory_from_frame(block.frame)
+
+    def __factory_from_frame(self, frame) -> Union["Factory", None]:
+        """Resolve an attached factory from `frame.id` (`{name}:{version}.{frame}`)."""
+        factory_id = frame.id.rsplit(".", 1)[0]
+        factory_name = factory_id.split(":", 1)[0]
+        entry = self.__factories.get(factory_name)
+        if not entry:
+            return None
+        factory = entry.get("factory")
+        if factory is None or factory.id != factory_id:
+            return None
+        return factory
 
     def __str__(self):
         return self.info
@@ -200,6 +246,7 @@ class Project():
         }
 
     def clone(self):
+        """Render each factory's `base/` templates into `src/<factory>/`."""
         logger.info("Cloning project base templates", project_id=self.__id, factories=list(self.__factories.keys()))
         for factory_name, factory_dict in self.__factories.items():
             factory: "Factory" = factory_dict.get("factory", None)
@@ -219,7 +266,30 @@ class Project():
             DirectoryTemplate(base_path).render(destination, self.get_context(factory))
             logger.info("Factory base cloned", project_id=self.__id, factory=factory_name, destination=str(destination))
 
+    def emit(self) -> list[Path]:
+        """Decode and render every block into its factory's `src/<factory>/` tree."""
+        logger.info("Emitting project blocks", project_id=self.__id, blocks=len(self.__blocks))
+        written: list[Path] = []
+
+        for block in self.__blocks.values():
+            factory = self.get_block_factory(block.name)
+            if factory is None:
+                logger.warning(
+                    "Emit skipped: block's factory not found",
+                    project_id=self.__id,
+                    block=block.id,
+                    frame=block.frame.id,
+                )
+                continue
+
+            destination_root = self.get_factory_path(factory.name)
+            written.extend(block.build(destination_root))
+
+        logger.info("Emit finished", project_id=self.__id, files=len(written))
+        return written
+
     def __execute_pipeline(self, pipeline_name: str, **inputs):
+        """Run a named pipeline for each attached factory with cwd=`src/<factory>`."""
         logger.info("Running project pipeline", project_id=self.__id, pipeline=pipeline_name)
         for factory_name, factory_dict in self.__factories.items():
             factory: "Factory" = factory_dict.get("factory", None)
@@ -227,14 +297,42 @@ class Project():
                 continue
 
             executer_name = f"{factory_name}.{pipeline_name}"
-            actions = factory.lifecycle.get(pipeline_name, [])
+            actions = factory.pipelines.get(pipeline_name, [])
 
             executer = PipelineExecuter(name=executer_name, actions=actions)
+            cwd = self.get_factory_path(factory_name)
 
             context = self.get_context(factory)
-            executer(**context, **inputs)
+            executer(cwd=cwd, **context, **inputs)
+
+    def init(self):
+        """Run the optional `init` pipeline (after clone, before block emit)."""
+        logger.info("Running init pipeline", project_id=self.__id, name=self.__name)
+        self.__execute_pipeline(pipeline_name="init")
+        logger.info("Init finished", project_id=self.__id)
 
     def build(self):
+        """Full build: validate → clone → init → emit blocks → build pipeline."""
         logger.info("Building project", project_id=self.__id, name=self.__name)
+        self.validate_config()
+        self.clone()
+        self.init()
+        self.emit()
         self.__execute_pipeline(pipeline_name="build")
         logger.info("Build finished", project_id=self.__id)
+
+    def run(self):
+        """Run the optional `run` pipeline (experience / testing)."""
+        logger.info("Running project", project_id=self.__id, name=self.__name)
+        self.__execute_pipeline(pipeline_name="run")
+
+    def debug(self):
+        """Run the optional `debug` pipeline."""
+        logger.info("Debugging project", project_id=self.__id, name=self.__name)
+        self.__execute_pipeline(pipeline_name="debug")
+
+    def release(self):
+        """Run the optional `release` pipeline (package for release)."""
+        logger.info("Releasing project", project_id=self.__id, name=self.__name)
+        self.__execute_pipeline(pipeline_name="release")
+        logger.info("Release finished", project_id=self.__id)

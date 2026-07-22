@@ -23,12 +23,14 @@
             "type": "object",
             "description": "Maps definitions used by frames"
         },
-        "lifecycle": {
+        "pipelines": {
             "type": "object",
-            "description": "The lifecycle phases of the factory",
+            "description": "Optional named shell pipelines. Omit any pipeline a factory does not need.",
+            "additionalProperties": false,
             "properties": {
-                "build": {
+                "init": {
                     "type": "array",
+                    "description": "After project clone, before emitting/building blocks",
                     "items": {
                         "type": "object",
                         "properties": {
@@ -38,8 +40,9 @@
                         "required": ["name", "cmd"]
                     }
                 },
-                "rebuild": {
+                "build": {
                     "type": "array",
+                    "description": "After project and blocks are fully emitted",
                     "items": {
                         "type": "object",
                         "properties": {
@@ -51,6 +54,7 @@
                 },
                 "run": {
                     "type": "array",
+                    "description": "Run the application for experience and testing",
                     "items": {
                         "type": "object",
                         "properties": {
@@ -62,6 +66,7 @@
                 },
                 "debug": {
                     "type": "array",
+                    "description": "Run the application in debug mode",
                     "items": {
                         "type": "object",
                         "properties": {
@@ -73,6 +78,7 @@
                 },
                 "release": {
                     "type": "array",
+                    "description": "Package the application for release",
                     "items": {
                         "type": "object",
                         "properties": {
@@ -82,9 +88,7 @@
                         "required": ["name", "cmd"]
                     }
                 }
-            },
-            "required": ["build", "rebuild", "run", "debug", "release"]
+            }
         }
-    },
-    "required": ["lifecycle"]
+    }
 }

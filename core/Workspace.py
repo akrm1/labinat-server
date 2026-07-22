@@ -214,6 +214,11 @@ class Workspace:
             return projects
 
     def create_block(self, project: Project, frame_id: str, block_name: str, data: dict) -> Union[Block, None]:
+        """Create a block in the DB and register it on the project.
+
+        The factory named in `frame_id` (`{factory}.{frame}`) must already be
+        attached to `project`; registration goes through `Project.add_block`.
+        """
         factory_name, frame_name = frame_id.split(".")
         factory = project.get_factory(factory_name)
         if not factory:
@@ -229,8 +234,18 @@ class Workspace:
         block.load(project, factory)
         block.validate()
 
+        if not project.add_block(block):
+            return None
+
         with get_db() as db:
-            block_record = BlockModel(project_id=project.id, factory=factory.name, factory_version=factory.version, frame=frame_name, name=block_name, data=data)
+            block_record = BlockModel(
+                project_id=project.id,
+                factory=factory.name,
+                factory_version=factory.version,
+                frame=frame_name,
+                name=block_name,
+                data=data,
+            )
             db.add(block_record)
             db.commit()
 
@@ -238,27 +253,38 @@ class Workspace:
         return block
 
     def delete_blocks(self, project: Project, blocks_names: list[str]) -> bool:
+        """Delete blocks from the DB and unregister them from the project."""
         with get_db() as db:
             db.query(BlockModel).filter(BlockModel.project_id == project.id, BlockModel.name.in_(blocks_names)).delete()
             db.commit()
-            logger.info("Blocks deleted", project_id=project.id, blocks=blocks_names)
 
-            return True
+        for name in blocks_names:
+            project.remove_block(name)
+
+        logger.info("Blocks deleted", project_id=project.id, blocks=blocks_names)
+        return True
 
     def get_blocks(self, project: Project, blocks_names: list[str]) -> dict[str, Block]:
+        """Load named blocks from the DB and register them on the project."""
         blocks = {}
 
         with get_db() as db:
-            block_records = db.query(BlockModel).filter(BlockModel.project_id == project.id, BlockModel.name.in_(blocks_names)).all()
+            block_records = db.query(BlockModel).filter(
+                BlockModel.project_id == project.id,
+                BlockModel.name.in_(blocks_names),
+            ).all()
             for block_record in block_records:
                 factory = project.get_factory(block_record.factory)
+                if not factory:
+                    continue
                 frame = factory.get_frame(block_record.frame)
-
-                if not factory or not frame:
+                if not frame:
                     continue
 
                 block = Block(frame=frame, name=block_record.name, data=block_record.data)
                 block.load(project, factory)
+                if not project.add_block(block):
+                    continue
                 blocks[block_record.name] = block
 
         return blocks

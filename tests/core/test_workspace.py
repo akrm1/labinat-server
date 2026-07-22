@@ -176,6 +176,8 @@ def test_delete_blocks_scoped_to_project_and_names(workspace, tmp_path):
     workspace.create_block(project_b, "backend-fastapi.table", "t1", {"name": "OtherT1"})
 
     assert workspace.delete_blocks(project_a, ["t1"]) is True
+    assert project_a.get_block("t1") is None
+    assert project_b.get_block("t1") is not None
 
     with database.get_db() as db:
         remaining = db.query(BlockModel).filter(BlockModel.name == "t1").all()
@@ -217,3 +219,69 @@ def test_get_all_projects_returns_every_project(workspace, catalog, tmp_path):
     assert {p.name for p in all_projects.values()} == {"A", "B"}
     for project in all_projects.values():
         assert project.get_factory("backend-fastapi").get_frame("table") is not None
+
+
+def test_create_block_registers_block_on_project(workspace, tmp_path):
+    factory = make_factory_with_table_frame(tmp_path)
+    project = workspace.create_project(name="Test", factories=[factory])
+
+    block = workspace.create_block(
+        project, frame_id="backend-fastapi.table", block_name="users_table", data={"name": "Users"}
+    )
+
+    assert block is not None
+    assert project.get_block("users_table") is block
+    assert project.get_block_factory("users_table") is factory
+
+
+def test_loaded_project_build_runs_m2_orchestration(workspace, catalog, tmp_path, monkeypatch):
+    """M2: reload project from DB, then Project.build() = validate→clone→init→emit→build."""
+    factory = make_factory_with_table_frame(tmp_path, catalog=catalog)
+    factory.spec.data["pipelines"] = {
+        "init": [{"name": "init", "cmd": "echo init"}],
+        "build": [{"name": "build", "cmd": "echo build"}],
+    }
+    with database.get_db() as db:
+        record = db.query(FactoryModel).filter_by(name="backend-fastapi", version="v1").first()
+        record.data = factory.spec.data
+        db.commit()
+
+    # Give the frame a concrete so emit has something to write.
+    frame_path = catalog.get_factory_path("backend-fastapi") / "v1" / "frames" / "table"
+    (frame_path / "concretes" / "model.py.j2").write_text("name={{ block.spec.name }}\n")
+    with database.get_db() as db:
+        frame_record = db.query(FrameModel).filter_by(
+            factory="backend-fastapi", factory_version="v1", name="table"
+        ).first()
+        frame_record.data = {
+            "properties": {"name": {"type": "string"}},
+            "required": ["name"],
+            "concretes": [{"name": "model.py", "destination": "{{ block.spec.name }}_model.py"}],
+        }
+        db.commit()
+
+    project = workspace.create_project(
+        name="Test",
+        config={"app": {"name": "Demo"}, "backend-fastapi": {}},
+        factories=[factory],
+    )
+    workspace.create_block(project, "backend-fastapi.table", "users", {"name": "Users"})
+
+    reloaded = workspace.get_project(project.id, catalog)
+    assert reloaded is not None
+    assert "users" in reloaded.blocks
+
+    calls = []
+
+    def fake_execute(cmd, inputs=None, cwd=None):
+        calls.append((cmd, str(cwd) if cwd else None))
+        return 0
+
+    monkeypatch.setattr("utils.os.execute", fake_execute)
+    reloaded.build()
+
+    assert ("echo init", str(reloaded.get_factory_path("backend-fastapi"))) in calls
+    assert ("echo build", str(reloaded.get_factory_path("backend-fastapi"))) in calls
+    emitted = reloaded.get_factory_path("backend-fastapi") / "Users_model.py"
+    assert emitted.exists()
+    assert emitted.read_text().strip() == "name=Users"

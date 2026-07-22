@@ -9,14 +9,14 @@ Technical reference for Labinat. Covers all core terms, how the system is struct
 | Term | Definition |
 |------|------------|
 | **Catalog** | The registry of factories and frames. Path configured in `config.yaml` (default: `catalog/`). |
-| **Factory** | A versioned stack profile: lifecycle commands, frame definitions, maps, and a config schema. |
+| **Factory** | A versioned stack profile: optional pipelines, frame definitions, maps, and a config schema. |
 | **Frame** | A component-type definition: what fields a block may contain and what output files it produces. |
 | **Block** | One instance of a frame — a validated JSON object describing a single component (e.g. one table, one screen). |
 | **Concrete** | A named output file that a frame can generate. Each concrete maps to a template under `concretes/`. |
 | **Bindings** | Snippet templates that describe how this frame's data appears when embedded inside another frame's output. |
 | **Map** | A named key→value lookup registered as a custom schema type (`map.<name>`), typically shared across a factory. |
 | **Workspace** | Where projects, blocks, and generated source live. Path configured in `config.yaml` (default: `workspace/`). |
-| **Lifecycle** | The factory's set of shell command sequences (`build`, `rebuild`, `run`, `debug`, `release`) for operating the project toolchain. |
+| **Pipelines** | Optional factory shell command sequences (`init`, `build`, `run`, `debug`, `release`). Omit any a factory does not need. |
 
 ---
 
@@ -25,7 +25,7 @@ Technical reference for Labinat. Covers all core terms, how the system is struct
 ```mermaid
 flowchart LR
   subgraph catalog [Catalog]
-    Factory[Factory\nlifecycle · maps · config]
+    Factory[Factory\npipelines · maps · config]
     Frame[Frame\nschema · concretes · bindings]
     Factory --> Frame
   end
@@ -36,7 +36,7 @@ flowchart LR
   end
   Frame --> Block
   Block --> Emit["Emit\nFrame.render + Jinja2"]
-  Factory --> Lifecycle["Lifecycle\nPipelineExecuter"]
+  Factory --> Pipelines["Pipelines\nPipelineExecuter"]
 ```
 
 The **catalog** holds definitions; the **workspace** holds instances. A frame defines what a block may look like; a block is one concrete use of that frame inside a project.
@@ -95,14 +95,24 @@ A **concrete** is one named output file a frame knows how to produce.
 
 ---
 
-## Lifecycle vs emit
+## Pipelines vs emit
 
 | Concern | Driven by | Typical operations |
 |---------|-----------|-------------------|
-| Project toolchain | Factory lifecycle → `PipelineExecuter` | build, rebuild, run, debug, release |
+| Project toolchain | Factory `pipelines` → `PipelineExecuter` | `init`, `build`, `run`, `debug`, `release` (all optional) |
 | Block → source file | Frame concretes + Jinja2 | emit via `Block.build` / `Frame.render` |
 
-Lifecycle commands are shell sequences defined in the factory's data and executed by `PipelineExecuter` (commands are Jinja-rendered with project/factory context). Emit is separate: it writes block concretes into the project tree. Wiring emit into a full `Project.build`/`rebuild` orchestration is planned (platform roadmap M2).
+| Pipeline | Timing in `Project.build()` |
+|----------|-----------------------------|
+| *(scaffold)* | `clone()` — render factory `base/` into `src/<factory>/` |
+| `init` | After clone, before emitting blocks (`cwd=src/<factory>`) |
+| *(emit)* | Decode + render every registered block into its factory src tree |
+| `build` | After emit (`cwd=src/<factory>`) |
+| `run` / `debug` / `release` | On demand via `Project.run/debug/release` (same cwd) |
+
+`Project.build()` order: **validate_config → clone → init → emit → build pipeline**.
+
+Blocks are only registered on a project when their frame's factory is already attached (`Project.add_block`). Workspace create/load/delete block ops go through that gate; orchestration stays on `Project` (e.g. `workspace.get_project(...)` then `project.build()`).
 
 ---
 

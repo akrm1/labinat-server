@@ -1,4 +1,4 @@
-"""Execute a named sequence of shell lifecycle actions for a factory."""
+"""Execute a named sequence of shell pipeline actions for a factory."""
 
 from utils import os
 from utils import logger
@@ -7,10 +7,11 @@ from typing import Union
 
 
 class PipelineExecuter:
-    """Runs factory lifecycle steps (`build`, `rebuild`, …) as shell commands.
+    """Runs a factory pipeline (`init`, `build`, `run`, `debug`, `release`).
 
     Each action is `{name, cmd}`; `cmd` may be a Jinja template filled from
-    the project/factory context passed into `__call__`.
+    the project/factory context passed into `__call__`. An empty action list
+    is a no-op (pipelines are optional per factory).
     """
 
     def __init__(self, name: str, actions: list[dict] = []):

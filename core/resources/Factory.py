@@ -1,4 +1,4 @@
-"""Catalog factory: versioned stack profile holding frames and lifecycle data."""
+"""Catalog factory: versioned stack profile holding frames and pipelines."""
 
 from base.CatalogResource import CatalogResource
 from pathlib import Path
@@ -11,10 +11,10 @@ if TYPE_CHECKING:
 
 
 class Factory(CatalogResource):
-    """Versioned catalog package: maps, config schema, lifecycle, and frames.
+    """Versioned catalog package: maps, config schema, pipelines, and frames.
 
     Identity is `name:version`. On-disk path is the factory root; frames live
-    under `version_path/frames/`. Spec data holds `maps`, `config`, `lifecycle`.
+    under `version_path/frames/`. Spec data holds `maps`, `config`, `pipelines`.
     """
 
     def __init__(self, name: str, version: str, data: dict, path: Path):
@@ -70,8 +70,9 @@ class Factory(CatalogResource):
         return self.spec.get('config', {})
 
     @property
-    def lifecycle(self) -> dict:
-        return self.spec.get('lifecycle', {})
+    def pipelines(self) -> dict:
+        """Optional named shell pipelines (`init`, `build`, `run`, `debug`, `release`)."""
+        return self.spec.get('pipelines', {})
 
     def add_frame(self, frame: "Frame"):
         """Register a frame under this factory (keyed by frame name)."""
