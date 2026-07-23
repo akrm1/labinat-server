@@ -3,14 +3,17 @@
 from pathlib import Path
 import shutil
 from typing import Union
-from utils.helpers import asjson, load_json
+from utils.helpers import asjson, load_json, save_json
 from utils import logger
+from utils.fs import is_python_bytecode
 from data.database import get_db
 from data.models.FactoryModel import FactoryModel
 from data.models.FrameModel import FrameModel
 from core.resources.Factory import Factory
 from core.resources.Frame import Frame
 from base.Template import Template
+from base.Spec import Spec
+from base.Packager import Packager, PackagerError
 
 
 class Catalog:
@@ -18,7 +21,11 @@ class Catalog:
 
     CRUD mutates SQLite and the on-disk tree under `catalog/factories/`.
     Lookups hydrate `Factory`/`Frame` objects and call `frame.load()`.
+    Factory package import/export also live here (Specs in DB, artifacts on disk).
     """
+
+    __packager = Packager(format_version=1, staging_prefix="labinat-factory-pkg-")
+    __package_root = "factory"
 
     def __init__(self, catalog_config: dict):
         self.__path: Path = Path(catalog_config['path'])
@@ -318,6 +325,134 @@ class Catalog:
             logger.info("Frame updated", frame=frame.id)
             return True
 
+    def export_factory(self, factory_name: str, version: str, dest_path: Union[str, Path]) -> Path:
+        """Pack a registered factory into a `.tar.gz` archive.
+
+        Specs are taken from the database (via `get_factory`); artifacts from
+        the on-disk tree. Spec JSON files appear only inside the archive.
+        """
+        factory = self.get_factory(factory_name, version)
+        if factory is None:
+            raise PackagerError(f"Factory not found: {factory_name}:{version}")
+
+        packager = self.__packager
+        dest_path = packager.archive_path(dest_path, f"{factory.name}-{factory.version}.tar.gz")
+        logger.info("Exporting factory", factory=factory.id, dest=str(dest_path))
+
+        with packager.staging_dir() as staging:
+            staging_root = Path(staging)
+            package_dir = staging_root / self.__package_root / factory.name / factory.version
+            package_dir.mkdir(parents=True, exist_ok=True)
+
+            packager.copy_tree(factory.version_path, package_dir)
+            Factory.strip_spec_files(package_dir)
+
+            save_json(str(package_dir / "factory.json"), factory.spec.data or {})
+            for frame in factory.frames.values():
+                frame_dir = package_dir / "frames" / frame.name
+                frame_dir.mkdir(parents=True, exist_ok=True)
+                save_json(str(frame_dir / "frame.json"), frame.spec.data or {})
+
+            packager.write_manifest(
+                staging_root, package_dir, name=factory.name, version=factory.version
+            )
+            return packager.pack(staging_root, dest_path)
+
+    def import_factory(self, archive_path: Union[str, Path], overwrite: bool = False) -> Factory:
+        """Import a factory archive: Specs → DB, artifacts → disk (no Spec JSON on disk)."""
+        packager = self.__packager
+        archive_path = Path(archive_path)
+
+        with packager.staging_dir() as staging:
+            staging_root = Path(staging)
+            packager.unpack(archive_path, staging_root)
+            manifest = packager.read_manifest(staging_root, "name", "version")
+            name, version = manifest["name"], manifest["version"]
+
+            package_dir = staging_root / self.__package_root / name / version
+            if not package_dir.is_dir():
+                raise PackagerError(
+                    f"Package directory missing: {self.__package_root}/{name}/{version}"
+                )
+
+            factory_data, frames = self.__read_package_specs(package_dir, name)
+            Spec(factory_data).validate(self.get_schema("factory_schema"))
+            for frame_data in frames.values():
+                Spec(frame_data).validate(self.get_schema("frame_schema"))
+
+            version_path = self.get_factory_path(name) / version
+
+            with get_db() as db:
+                existing = db.query(FactoryModel).filter_by(name=name, version=version).first()
+                if existing and not overwrite:
+                    raise PackagerError(
+                        f"Factory already exists: {name}:{version} (pass overwrite=True)"
+                    )
+
+                if version_path.exists():
+                    if not overwrite:
+                        raise PackagerError(
+                            f"On-disk factory path already exists: {version_path}"
+                        )
+                    shutil.rmtree(version_path)
+
+                version_path.parent.mkdir(parents=True, exist_ok=True)
+                packager.copy_tree(package_dir, version_path)
+                Factory.strip_spec_files(version_path)
+
+                if existing:
+                    existing.data = factory_data
+                else:
+                    db.add(FactoryModel(name=name, version=version, data=factory_data))
+
+                for frame_name, frame_data in frames.items():
+                    frame_record = db.query(FrameModel).filter_by(
+                        factory=name, factory_version=version, name=frame_name
+                    ).first()
+                    if frame_record:
+                        frame_record.data = frame_data
+                    else:
+                        db.add(FrameModel(
+                            factory=name,
+                            factory_version=version,
+                            name=frame_name,
+                            data=frame_data,
+                        ))
+
+                db.commit()
+
+        factory = self.get_factory(name, version)
+        logger.info("Factory imported", factory=f"{name}:{version}", frames=len(frames))
+        return factory
+
+    def __read_package_specs(
+        self, package_dir: Path, name: str
+    ) -> tuple[dict, dict[str, dict]]:
+        """Read Spec JSON from an unpacked package (transport only, not catalog disk)."""
+        factory_json = package_dir / "factory.json"
+        if not factory_json.exists():
+            raise PackagerError("factory.json missing from package")
+        factory_data = load_json(str(factory_json))
+        if not isinstance(factory_data, dict):
+            raise PackagerError("factory.json must be an object")
+
+        frames: dict[str, dict] = {}
+        frames_root = package_dir / "frames"
+        if frames_root.is_dir():
+            for frame_dir in sorted(frames_root.iterdir()):
+                if not frame_dir.is_dir() or is_python_bytecode(frame_dir):
+                    continue
+                frame_json = frame_dir / "frame.json"
+                if not frame_json.exists():
+                    raise PackagerError(f"frame.json missing for frame '{frame_dir.name}'")
+                data = load_json(str(frame_json))
+                if not isinstance(data, dict):
+                    raise PackagerError(f"frame.json for '{frame_dir.name}' must be an object")
+                data.setdefault("name", frame_dir.name)
+                data.setdefault("factory", name)
+                frames[frame_dir.name] = data
+
+        return factory_data, frames
 
     def summary(self):
         factories = self.get_all_factories()

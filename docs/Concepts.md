@@ -116,6 +116,40 @@ Blocks are only registered on a project when their frame's factory is already at
 
 ---
 
+## Factory packages
+
+Factories are portable `.tar.gz` archives. [`Packager`](../base/Packager.py) handles stage/manifest/pack/unpack; [`Catalog`](../core/Catalog.py) owns `export_factory` / `import_factory`.
+
+**Specs live in the database.** On-disk catalog trees hold artifacts only (`module.py`, concretes, bindings, `base/`). Spec JSON (`factory.json` / `frame.json`) exists only inside packages for transport:
+
+- **Export** — Specs from DB + artifacts from disk → archive (JSON written into the package only).
+- **Import** — Specs from package JSON → DB; artifacts → disk (Spec JSON stripped from the catalog tree).
+
+**Archive layout**
+
+```
+MANIFEST.json                 # format_version, name, version, checksums
+factory/<name>/<version>/
+  factory.json                # factory Spec (transport only)
+  frames/<frame>/
+    frame.json                # frame Spec (transport only)
+    module.py
+    concretes/*
+    bindings/*
+  base/                       # optional clone scaffold
+```
+
+| Layer | Role |
+|-------|------|
+| `utils/fs` | Shared filesystem helpers |
+| `Packager` | stage, MANIFEST, pack, unpack |
+| `Catalog` | `export_factory` / `import_factory` (DB Specs + disk artifacts) |
+| `Factory` | Single factory instance hydrated from DB |
+
+Share factories via export/import. Path traversal and unsupported `format_version` are rejected.
+
+---
+
 ## Logging
 
 All application logging goes through [`utils/logger.py`](../utils/logger.py), configured from the `logger` section of `config.yaml` during `server.init()`.

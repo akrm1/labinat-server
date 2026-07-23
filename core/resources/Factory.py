@@ -1,9 +1,11 @@
 """Catalog factory: versioned stack profile holding frames and pipelines."""
 
-from base.CatalogResource import CatalogResource
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Union, TYPE_CHECKING
 
+from base.CatalogResource import CatalogResource
 from utils import logger
 
 if TYPE_CHECKING:
@@ -14,7 +16,10 @@ class Factory(CatalogResource):
     """Versioned catalog package: maps, config schema, pipelines, and frames.
 
     Identity is `name:version`. On-disk path is the factory root; frames live
-    under `version_path/frames/`. Spec data holds `maps`, `config`, `pipelines`.
+    under `version_path/frames/`. Spec data holds `maps`, `config`, `pipelines`
+    and is loaded from the catalog database — not from Spec JSON files on disk.
+
+    Package import/export lives on `Catalog`.
     """
 
     def __init__(self, name: str, version: str, data: dict, path: Path):
@@ -85,3 +90,20 @@ class Factory(CatalogResource):
         if frame is None:
             logger.debug("Factory frame not found", factory=self.id, frame=frame_name)
         return frame
+
+    @classmethod
+    def strip_spec_files(cls, version_path: Union[str, Path]) -> None:
+        """Remove Spec JSON from a version tree (artifacts only; Specs live in DB)."""
+        version_path = Path(version_path)
+        factory_json = version_path / "factory.json"
+        if factory_json.exists():
+            factory_json.unlink()
+        frames_root = version_path / "frames"
+        if not frames_root.is_dir():
+            return
+        for frame_dir in frames_root.iterdir():
+            if not frame_dir.is_dir():
+                continue
+            frame_json = frame_dir / "frame.json"
+            if frame_json.exists():
+                frame_json.unlink()
