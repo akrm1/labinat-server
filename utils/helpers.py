@@ -1,4 +1,5 @@
 from typing import Any, Mapping
+from datetime import datetime, timezone
 import json
 import yaml
 from jsonpath_ng import parse
@@ -6,6 +7,15 @@ import uuid
 
 def generate_unique_id() -> str:
     return str(uuid.uuid4())
+
+def utcnow() -> datetime:
+    """Naive UTC now, matching how SQLite round-trips `DateTime` columns.
+
+    SQLite has no timezone-aware type, so stored values come back naive.
+    Using this for every persisted timestamp keeps comparisons against
+    columns like `expires_at` from raising on naive-vs-aware mismatches.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 def asjson(obj: Any) -> str:
     return json.dumps(obj, indent=2, ensure_ascii=False, default=str)

@@ -112,22 +112,6 @@ def test_is_initialized_and_reset():
     assert logger.is_initialized() is False
 
 
-def test_server_log_reexports_central_logger(tmp_path):
-    import server
-
-    log_path = tmp_path / "server.log"
-    logger.init({
-        "name": "test-app",
-        "handlers": {"file": {"path": str(log_path)}},
-        "format": "%(message)s",
-    })
-    server.log("via-server", level="warning", code=42)
-
-    content = log_path.read_text()
-    assert "via-server" in content
-    assert "code=42" in content
-
-
 def test_init_from_real_config_yaml_shape(tmp_path):
     """Ensure the exact keys in config.yaml are consumed by logger.init."""
     log_path = tmp_path / "from-yaml.log"
@@ -142,7 +126,7 @@ def test_init_from_real_config_yaml_shape(tmp_path):
         },
     }
 
-    # Round-trip through YAML like server.load_config does.
+    # Round-trip through YAML like bootstrap.load does.
     loaded = yaml.safe_load(yaml.dump(config))
     logger.init(loaded)
     logger.info("from-config")

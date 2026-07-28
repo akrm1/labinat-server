@@ -4,3 +4,5 @@ jsonschema==4.26.0
 PyYAML==6.0.3
 SQLAlchemy==2.0.51
 pytest==9.1.1
+PyJWT==2.13.0
+argon2-cffi==25.1.0

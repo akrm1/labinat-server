@@ -8,6 +8,16 @@ database:
   url: "sqlite:///./data/database.db"
   logging: false
 
+auth:
+  token:
+    secret-path: "auth/jwt-secret"
+    algorithm: "HS256"
+    access_ttl_minutes: 15
+    refresh_ttl_days: 30
+  admin:
+    lab_admin:
+      pass-path: "auth/lab_admin-password"
+
 logger:
   name: app
   level: info

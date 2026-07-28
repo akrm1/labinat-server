@@ -34,6 +34,10 @@ workspace/projects/*
 .env
 .env.*
 
+# Bootstrap-generated secrets (see the `auth` section of config.yaml)
+auth/*-password
+auth/*-secret
+
 # Editor / IDE
 .vscode/
 .idea/

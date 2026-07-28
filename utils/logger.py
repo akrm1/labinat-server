@@ -1,8 +1,7 @@
 """Centralized application logging.
 
-All domain code should log through this module (or `server.log`, which is a
-thin re-export). Configure once via `init()` from `config.yaml` during
-`server.init()`.
+All domain code should log through this module. Configure once via `init()`
+from `config.yaml` during `bootstrap.init()`.
 """
 
 from __future__ import annotations
@@ -36,7 +35,7 @@ def is_initialized() -> bool:
 def get_logger() -> logging.Logger:
     """Return the process logger, creating a stderr fallback if not yet init'd.
 
-    Domain modules may log before `server.init()` (e.g. in unit tests). A
+    Domain modules may log before `bootstrap.init()` (e.g. in unit tests). A
     fallback avoids hard crashes while still emitting somewhere visible.
     """
     global __logger

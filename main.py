@@ -1,6 +1,6 @@
 # بسم الله الرحمن الرحيم
-import server
-server.init()
+from app import server
+server.start()
 
 from base.Spec import Spec
 from base.Binding import Binding

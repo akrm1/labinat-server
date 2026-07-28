@@ -17,6 +17,10 @@ Technical reference for Labinat. Covers all core terms, how the system is struct
 | **Map** | A named key→value lookup registered as a custom schema type (`map.<name>`), typically shared across a factory. |
 | **Workspace** | Where projects, blocks, and generated source live. Path configured in `config.yaml` (default: `workspace/`). |
 | **Pipelines** | Optional factory shell command sequences (`init`, `build`, `run`, `debug`, `release`). Omit any a factory does not need. |
+| **User** | A principal that can authenticate: a human (password + JWT) or a service account (API token only, no password). |
+| **Group** | An org bucket of users bound to one Role. Users may belong to many groups. |
+| **Role** | A named, customizable list of permission strings. Never hardcoded — created/edited at runtime. |
+| **Permission** | A plain string (e.g. `catalog:write`) or the wildcard `*` (grants everything). |
 
 ---
 
@@ -150,9 +154,82 @@ Share factories via export/import. Path traversal and unsupported `format_versio
 
 ---
 
+## Authentication and authorization
+
+Auth classes live in [`core/auth/`](../core/auth) and own their own persistence — `User.get(...)`, `user.set_password(...)`, `user.login(...)` each read and write the database directly. Generic mechanisms sit underneath them: [`Tokenizer`](../base/Tokenizer.py) signs JWTs and mints opaque secrets, [`utils/security`](../utils/security.py) hashes passwords, the same way `Packager` pairs with `utils/fs`.
+
+| Class | Role |
+|-------|------|
+| `User` | Accounts, passwords, login, membership, effective permissions |
+| `Group` | A bucket of users bound to one role |
+| `Role` | A named permission list (`grant` / `revoke` / `has_permission`) |
+| `Session` | An issued login: JWT access token + rotatable refresh token |
+| `ServiceToken` | A service account's long-lived API token |
+
+**Users vs. service accounts** — one `users` table, split by `is_service`:
+
+| | Human user | Service account |
+|---|---|---|
+| Authenticates with | Password → `Session` (JWT + refresh token) | A `ServiceToken` secret |
+| `password_hash` | set | always `None` |
+| Typical caller | a person logging into a UI | external software calling the API |
+
+- **Login** — `user.login(password)` (or `User.authenticate(username, password)`) verifies the Argon2 hash and returns a `Session`. `Session.refresh(token)` rotates: the old refresh token is revoked and a new pair issued, so a captured token is single-use. `Session.revoke` / `Session.revoke_all` log out.
+- **Service accounts** — `user.issue_token(name)` mints a `ServiceToken`, refusing human users. The raw secret is readable once, from `token.secret`; only its SHA-256 hash is stored, so a lost token is replaced rather than recovered.
+- Both paths reject deactivated accounts, so `user.deactivate()` immediately kills sessions and tokens alike.
+
+**Roles and groups** (`User` → `UserGroup` → `Group` → `Role` → `permissions[]`) are runtime data, never hardcoded:
+
+- A role is a name plus a list of permission strings; `Role.WILDCARD` (`*`) grants everything.
+- A group binds to one role; a user joins any number of groups.
+- **Conflict resolution is a union** — `user.permissions` is the union of every role reachable through the user's groups. More membership only ever adds rights; there is no deny list or role ranking. `user.require_permission(...)` raises `PermissionDeniedError`.
+
+First-run setup is not an auth concern — see [Bootstrap](#bootstrap) below.
+
+---
+
+## Bootstrap
+
+[`app/bootstrap.py`](../app/bootstrap.py) is a library of small setup operations; [`app/server.start()`](../app/server.py) calls them in sequence to bring the process up:
+
+```python
+def start() -> dict:
+    bootstrap.load()                              # config.yaml → bootstrap.config
+
+    token_secret = bootstrap.create_token_secret()  # resolve/generate the JWT secret
+    bootstrap.init(token_secret)                    # logger, database, controller, Session signing
+    bootstrap.create_admin()                        # admin role, Admins group, admin user(s)
+
+    return bootstrap.config
+```
+
+`create_token_secret()` runs before `init()` because it only touches the filesystem (no database yet); `create_admin()` runs after `init()` because it needs the database to be up. Nothing in `bootstrap.py` runs on import — each function does one job and is safe to repeat, since `start()` runs on every process start: fill in what is absent, leave existing records alone. That way a restart never overwrites an admin's later changes (a rotated password, an edited role).
+
+`bootstrap.create_token_secret` and `bootstrap.create_admin` read the `auth` section of `config.yaml`:
+
+```yaml
+auth:
+  token:
+    secret-path: "auth/jwt-secret"   # generated on first run
+    algorithm: "HS256"
+    access_ttl_minutes: 15
+    refresh_ttl_days: 30
+  admin:
+    lab_admin:
+      pass-path: "auth/lab_admin-password"
+```
+
+- **Signing secret** (`create_token_secret`) — the HMAC key that signs access tokens. Read from `secret-path`, generated there on first run (mode `600`) and left untouched afterwards. It is persisted rather than regenerated per boot because a new secret invalidates every token signed with the old one, logging everybody out; delete the file to rotate deliberately. `create_token_secret` raises `BootstrapError` if `secret-path` is missing. The resolved value is passed into `bootstrap.init`, which forwards it to `Session.init`; neither `Session` nor `Tokenizer` touch the filesystem themselves.
+- **Admin role and group** (`create_admin`) — the `admin` role (`["*"]`) and the `Admins` group bound to it, seeded once and left alone afterwards.
+- **Admin users** (`create_admin`) — one per key under `auth.admin` (the key *is* the username). Each new admin joins `Admins`, so it inherits full access, with a random password written to its `pass-path`. Existing usernames are skipped untouched.
+
+Generated secrets are gitignored (`auth/*-password`, `auth/*-secret`).
+
+---
+
 ## Logging
 
-All application logging goes through [`utils/logger.py`](../utils/logger.py), configured from the `logger` section of `config.yaml` during `server.init()`.
+All application logging goes through [`utils/logger.py`](../utils/logger.py), configured from the `logger` section of `config.yaml` during `bootstrap.init()`.
 
 | Severity | Typical use |
 |----------|-------------|
@@ -172,8 +249,6 @@ All application logging goes through [`utils/logger.py`](../utils/logger.py), co
 
 Hot paths (e.g. `BindingType.validate` during jsonschema checks) stay quiet — log at registration or decode time instead.
 
-`server.log(...)` remains a thin re-export for legacy call sites; prefer `from utils import logger` in new code (`logger.info`, `logger.error`, …).
-
 Set `logger.level: DEBUG` in `config.yaml` (or the console handler level) to see base/core construct and validate traces.
 
 ---
@@ -186,13 +261,16 @@ Set `logger.level: DEBUG` in `config.yaml` (or the console handler level) to see
 | `catalog/schemas/` | JSON schemas that validate factory and frame data |
 | `workspace/` | Projects with generated `src/` |
 | `core/` | Domain models: `Catalog`, `Workspace`, `Project`, `Factory`, `Frame`, `Block` |
-| `base/` | Foundations: `Resource`, `CatalogResource`, `Spec`, `Schema`, `PipelineExecuter`, `DataType`, `Binding` |
+| `core/auth/` | `User`, `Group`, `Role`, `Session`, `ServiceToken` |
+| `base/` | Foundations: `Resource`, `CatalogResource`, `Spec`, `Schema`, `PipelineExecuter`, `DataType`, `Binding`, `Packager`, `Tokenizer` |
 | `data/` | SQLite persistence via SQLAlchemy (models + `database.py`) |
-| `utils/` | `RuntimeModule`, centralized logger, shell helpers |
+| `utils/` | `RuntimeModule`, centralized logger, shell and security helpers |
 | `tests/` | pytest suite |
-| `server.py` | Bootstrap: config → logger → database → catalog + workspace |
-| `controller.py` | Singleton `Catalog` and `Workspace` |
-| `config.yaml` | Catalog path, workspace path, database URL, logger settings |
+| `app/` | Composition root: wires config into a running process |
+| `app/server.py` | `start()`: sequences `bootstrap`'s setup operations |
+| `app/controller.py` | Singleton `Catalog` and `Workspace` |
+| `app/bootstrap.py` | Idempotent setup operations: config loading, logger/database/controller, auth signing secret, admin role/group/users |
+| `config.yaml` | Catalog/workspace paths, database URL, auth token + admin settings, logger settings |
 
 ---
 
@@ -214,7 +292,7 @@ Requires Python 3.12+ (see project env). Configure `config.yaml`, then:
 python main.py
 ```
 
-`server.init()` loads the config, sets up the logger (format, datefmt, console/file handlers), auto-creates the database schema, and wires the `Catalog` and `Workspace` singletons.
+`server.start()` loads the config, sets up the logger (format, datefmt, console/file handlers), auto-creates the database schema, wires the `Catalog` and `Workspace` singletons, and prepares auth (token signing secret, admin role/group/users) — see [Bootstrap](#bootstrap).
 
 Run the test suite:
 
