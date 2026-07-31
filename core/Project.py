@@ -8,7 +8,7 @@ from utils.helpers import asjson, asyaml
 from utils import logger
 from base.Spec import Spec
 from base.DirectoryTemplate import DirectoryTemplate
-from base.PipelineExecuter import PipelineExecuter
+from base.PipelineExecuter import PipelineExecuter, PipelineError
 
 if TYPE_CHECKING:
     from core.resources.Factory import Factory
@@ -289,7 +289,12 @@ class Project():
         return written
 
     def __execute_pipeline(self, pipeline_name: str, **inputs):
-        """Run a named pipeline for each attached factory with cwd=`src/<factory>`."""
+        """Run a named pipeline for each attached factory with cwd=`src/<factory>`.
+
+        Raises `PipelineError` on the first factory whose pipeline fails, so a
+        broken step stops the build instead of letting later stages run
+        against a half-built tree.
+        """
         logger.info("Running project pipeline", project_id=self.__id, pipeline=pipeline_name)
         for factory_name, factory_dict in self.__factories.items():
             factory: "Factory" = factory_dict.get("factory", None)
@@ -303,7 +308,19 @@ class Project():
             cwd = self.get_factory_path(factory_name)
 
             context = self.get_context(factory)
-            executer(cwd=cwd, **context, **inputs)
+            return_code = executer(cwd=cwd, **context, **inputs)
+
+            if return_code != 0:
+                logger.error(
+                    "Project pipeline failed",
+                    project_id=self.__id,
+                    pipeline=pipeline_name,
+                    factory=factory_name,
+                    return_code=return_code,
+                )
+                raise PipelineError(
+                    f"Pipeline '{executer_name}' failed with return code {return_code}"
+                )
 
     def init(self):
         """Run the optional `init` pipeline (after clone, before block emit)."""

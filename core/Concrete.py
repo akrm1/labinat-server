@@ -28,7 +28,7 @@ class Concrete:
         self.__is_template: bool = as_template
 
         j2 = ".j2" if self.__is_template else ""
-        filename: str = f"{name}.{extension}{j2}"
+        filename: str = f"{name}.{self.__extension}{j2}"
         self.__src: Path = concretes_path.joinpath(filename)
         self.__destination: Path = None
         logger.debug(

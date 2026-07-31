@@ -1,7 +1,7 @@
 """Named key→value maps used as custom schema types (`map.<name>`)."""
 
 from typing import Dict, Any
-from base.types.DataType import DataType
+from base.types.DataType import DataType, DecodingError
 
 
 class Map(DataType):
@@ -23,6 +23,12 @@ class Map(DataType):
         return f"expected one of '{self.name}' values: {values}, but got \'{value_type}\' value: {value}"
     
     def decode(self, value: any) -> any:
+        # Spec.decode only recognises DecodingError; a bare KeyError would
+        # escape it and lose the path/type context it attaches to failures.
+        if value not in self.__items:
+            raise DecodingError(
+                f"'{value}' is not one of '{self.name}' values: {list(self.__items.keys())}"
+            )
         return self.__items[value]
 
 

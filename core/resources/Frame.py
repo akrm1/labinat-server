@@ -55,15 +55,21 @@ class Frame(CatalogResource):
         self.load()
 
     def render(self, destination_root: Path, context: dict) -> list[Path]:
-        """Resolve concrete destinations and write rendered/copied files."""
+        """Resolve concrete destinations and write rendered/copied files.
+
+        Only concretes declared in the frame spec are emitted. A file sitting
+        in `concretes/` with no spec entry has no destination to be written
+        to, and destinations are resolved per call because a single Frame is
+        shared by every block built from it.
+        """
+        concretes = self.__resolve_destinations(destination_root=destination_root, context=context)
         logger.info(
             "Frame render starting",
             frame=self.id,
             destination=str(destination_root),
-            concretes=len(self.__concretes),
+            concretes=len(concretes),
         )
-        self.__load_destinations(destination_root=destination_root, context=context)
-        paths = [concrete.render(context=context) for concrete in self.__concretes.values()]
+        paths = [concrete.render(context=context) for concrete in concretes]
         logger.info("Frame render finished", frame=self.id, files=len(paths))
         return paths
 
@@ -143,22 +149,35 @@ class Frame(CatalogResource):
 
         logger.debug("Frame concretes loaded", frame=self.id, count=len(self.__concretes))
 
-    def __load_destinations(self, destination_root: Path, context: dict):
+    def __resolve_destinations(self, destination_root: Path, context: dict) -> list[Concrete]:
+        """Point each spec'd concrete at its destination and return the renderable ones."""
         concretes_spec: list[dict] = self.spec.get("concretes", [])
+        resolved: list[Concrete] = []
+
         for spec in concretes_spec:
             name = spec.get("name").split(".")[0]
             concrete: Concrete = self.__concretes.get(name, None)
-            if concrete is not None:
-                destination = spec.get("destination", None)
-                destination = destination_root.joinpath(destination)
-
-                concrete.set_destination(destination, context=context)
-            else:
+            if concrete is None:
                 logger.warning(
                     "Frame concrete spec has no matching file",
                     frame=self.id,
                     concrete=name,
                 )
+                continue
+
+            destination = spec.get("destination", None)
+            if destination is None:
+                logger.warning(
+                    "Frame concrete spec has no destination",
+                    frame=self.id,
+                    concrete=name,
+                )
+                continue
+
+            concrete.set_destination(destination_root.joinpath(destination), context=context)
+            resolved.append(concrete)
+
+        return resolved
 
     def load_bindings(self):
         """Scan `bindings/` and register each `.j2` as a Template."""

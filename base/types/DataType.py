@@ -1,4 +1,4 @@
-"""Abstract custom schema types and the global decoder registry."""
+"""Abstract custom schema types used by Schema and Spec."""
 
 from abc import ABC, abstractmethod
 
@@ -20,15 +20,14 @@ class DecodingError(Exception):
 class DataType(ABC):
     """Base for platform custom types (`map.*`, `binding.*`, …).
 
-    Construction registers `decode` under `name` in the class-level
-    `DECODERS` map used by `Schema` / `Spec` during validation and decode.
+    Instances are registered per `Schema` via `Schema.define_type`, which is
+    what `Spec` consults to validate and decode. Types are deliberately not
+    tracked process-wide: the same name means different things to different
+    Specs.
     """
-
-    DECODERS = {}
 
     def __init__(self, name: str):
         self.__name = name
-        DataType.DECODERS[self.__name] = self.decode
         logger.debug("Custom type registered", type=self.__name)
 
     @property

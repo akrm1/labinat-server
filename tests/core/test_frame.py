@@ -96,6 +96,44 @@ def test_render_writes_rendered_concrete_to_destination(frame_dirs):
     assert output_file.read_text() == "class Users: pass"
 
 
+def test_render_skips_concretes_the_spec_does_not_declare(frame_dirs):
+    """Regression test: render used to walk every file in `concretes/`, so a
+    file with no spec entry had no destination set and blew up mid-render."""
+    (frame_dirs / "concretes" / "model.py.j2").write_text("class {{ block.name }}: pass")
+    (frame_dirs / "concretes" / "orphan.py.j2").write_text("orphan")
+
+    frame = make_frame(frame_dirs, data={
+        "concretes": [{"name": "model.py", "destination": "{{ block.name }}_model.py"}]
+    })
+    frame.load_concretes()
+
+    destination_root = frame_dirs.parent / "out"
+    rendered_paths = frame.render(
+        destination_root=destination_root, context={"block": {"name": "Users"}}
+    )
+
+    assert len(rendered_paths) == 1
+    assert (destination_root / "Users_model.py").exists()
+    assert not (destination_root / "orphan.py").exists()
+
+
+def test_render_skips_a_concrete_whose_spec_has_no_destination(frame_dirs):
+    """A spec entry without a `destination` has nowhere to be written, so it
+    is reported and skipped rather than joined onto the root as None."""
+    (frame_dirs / "concretes" / "model.py.j2").write_text("class {{ block.name }}: pass")
+
+    frame = make_frame(frame_dirs, data={
+        "concretes": [{"name": "model.py"}]
+    })
+    frame.load_concretes()
+
+    rendered_paths = frame.render(
+        destination_root=frame_dirs.parent / "out", context={"block": {"name": "Users"}}
+    )
+
+    assert rendered_paths == []
+
+
 def test_reload_reloads_module_concretes_and_bindings(frame_dirs):
     (frame_dirs / "module.py").write_text("VALUE = 1\n")
 

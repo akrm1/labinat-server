@@ -4,7 +4,7 @@ from base.Schema import Schema, FailureError
 from base.types.Map import Map
 from base.types.BindingType import BindingType
 from base.Binding import Binding
-from base.types.DataType import DataType, DecodingError
+from base.types.DataType import DecodingError
 from typing import Callable, Dict, Any, Union, List
 from utils.helpers import asjson, asyaml, jsonpath, save_json, save_yaml, load_json, load_yaml
 from utils import logger
@@ -171,13 +171,17 @@ class Spec:
             errors: list[str] = []
 
             for _type in types:
-                decoder = DataType.DECODERS.get(_type, None)
-                if not decoder:
+                # Resolved from this Spec's own schema: two Specs can each
+                # define a type of the same name (every block registers its
+                # own `binding.<frame>`), and a shared registry would hand
+                # back whichever one was constructed last.
+                data_type = self.__schema.types.get(_type, None)
+                if not data_type:
                     continue
 
                 tried = True
                 try:
-                    return decoder(attribute.value)
+                    return data_type.decode(attribute.value)
                 except DecodingError as e:
                     errors.append(f"decoding failed for type '{_type}': {e.message}")
             

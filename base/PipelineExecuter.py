@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import Union
 
 
+class PipelineError(Exception):
+    """Raised when a pipeline action exits non-zero."""
+
+
 class PipelineExecuter:
     """Runs a factory pipeline (`init`, `build`, `run`, `debug`, `release`).
 
@@ -39,10 +43,15 @@ class PipelineExecuter:
             if name is not None and cmd is not None:
                 self.add_action(name, cmd)
 
-    def __execute(self, cwd: Union[str, Path] = None, **inputs):
+    def __execute(self, cwd: Union[str, Path] = None, **inputs) -> int:
+        """Run every action in order, stopping at the first non-zero exit code.
+
+        Returns that exit code so the caller can decide whether to continue;
+        0 means the whole pipeline succeeded.
+        """
         if len(self.__actions) == 0:
             logger.debug("Pipeline has no actions; skipping", pipeline=self.__name)
-            return
+            return 0
         
         title = self.__name.capitalize()
         logger.info(
@@ -67,11 +76,12 @@ class PipelineExecuter:
                     cmd=cmd,
                     return_code=return_code,
                 )
-                return
+                return return_code
             
             logger.debug("Pipeline action finished", pipeline=self.__name, action=name)
         
         logger.info("Pipeline completed successfully", pipeline=title)
+        return 0
 
     def parameters(self, index: Union[int, str]) -> dict:
         """Return Jinja parameter names referenced by an action cmd."""
@@ -82,7 +92,7 @@ class PipelineExecuter:
         else:
             raise ValueError(f"Invalid index: {index}")
     
-    def __call__(self, cwd: Union[str, Path] = None, **inputs):
+    def __call__(self, cwd: Union[str, Path] = None, **inputs) -> int:
         """Execute the pipeline with optional working directory and Jinja inputs."""
         return self.__execute(cwd=cwd, **inputs)
 
