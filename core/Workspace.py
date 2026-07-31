@@ -79,6 +79,10 @@ class Workspace:
 
             project_record = ProjectModel(id=project_id, name=name, description=description, config=config, created_at=created_at)
             db.add(project_record)
+            # Flushed before the project_factories rows that point at it: the
+            # models declare foreign keys but no relationships, so the unit of
+            # work has no dependency to order these two inserts by.
+            db.flush()
 
             for factory in factories:
                 project.get_factory_path(factory.name).mkdir(parents=True, exist_ok=True)

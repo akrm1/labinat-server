@@ -43,18 +43,21 @@ def make_factory_with_table_frame(tmp_path, factory_name="backend-fastapi", vers
     factory.add_frame(frame)
 
     if catalog:
-        # Mirrors what Catalog.create_factory/create_frame would have already
-        # done: a FactoryModel/FrameModel row in the DB, plus the on-disk
-        # frame structure (module.py, concretes/, bindings/) that Frame.load()
-        # reads when Workspace reconstructs a Factory from the DB.
+        # The on-disk frame structure (module.py, concretes/, bindings/) that
+        # Frame.load() reads when Workspace reconstructs a Factory from the DB.
         (frame_path / "concretes").mkdir(parents=True, exist_ok=True)
         (frame_path / "bindings").mkdir(parents=True, exist_ok=True)
         (frame_path / "module.py").write_text("# frame module\n")
 
-        with database.get_db() as db:
-            db.add(FactoryModel(name=factory_name, version=version, data={}))
-            db.add(FrameModel(factory=factory_name, factory_version=version, name="table", data=frame_data))
-            db.commit()
+    # Mirrors what Catalog.create_factory/create_frame would already have done.
+    # Unconditional because blocks and project_factories carry a foreign key
+    # onto factories(name, version): without the parent row, attaching this
+    # factory to a project is a constraint violation.
+    with database.get_db() as db:
+        db.add(FactoryModel(name=factory_name, version=version, data={}))
+        db.flush()
+        db.add(FrameModel(factory=factory_name, factory_version=version, name="table", data=frame_data))
+        db.commit()
 
     return factory
 

@@ -85,10 +85,15 @@ def test_create_admin_writes_an_owner_only_password_file(db, tmp_path):
     assert pass_path.stat().st_mode & 0o777 == 0o600
 
 
-def test_create_admin_without_pass_path_is_still_created(db, tmp_path):
+def test_create_admin_without_pass_path_refuses_to_create_the_user(db, tmp_path):
+    """The password is generated during bootstrap and never asked for again,
+    so with nowhere to write it the account would be unreachable forever."""
     set_auth_config(tmp_path, {"lab_admin": {}})
-    bootstrap.create_admin()
-    assert User.get("lab_admin") is not None
+
+    with pytest.raises(bootstrap.BootstrapError):
+        bootstrap.create_admin()
+
+    assert User.get("lab_admin") is None
 
 
 def test_create_admin_leaves_existing_users_untouched(db, tmp_path):
@@ -107,7 +112,10 @@ def test_create_admin_leaves_existing_users_untouched(db, tmp_path):
 
 
 def test_create_admin_supports_multiple_admins(db, tmp_path):
-    set_auth_config(tmp_path, {"lab_admin": {}, "ops_admin": {}})
+    set_auth_config(tmp_path, {
+        "lab_admin": {"pass-path": str(tmp_path / "lab_admin-password")},
+        "ops_admin": {"pass-path": str(tmp_path / "ops_admin-password")},
+    })
     bootstrap.create_admin()
     assert sorted(User.all().keys()) == ["lab_admin", "ops_admin"]
 

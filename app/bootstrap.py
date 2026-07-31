@@ -86,21 +86,29 @@ def create_admin() -> User:
             logger.debug("Admin user already exists; skipping", username=username)
             continue
 
+        # Checked before the account exists: the password is generated here
+        # and never asked for again, so with nowhere to write it the admin
+        # would be created and immediately unreachable.
+        pass_path = user_config.get("pass-path")
+        if not pass_path:
+            raise BootstrapError(
+                f"auth.admin.{username}.pass-path is not configured; "
+                "the generated password would have nowhere to be written"
+            )
+
         password = generate_password()
         user = User.create(username, password, groups=[group])
 
-        pass_path = user_config.get("pass-path")
-        if pass_path:
-            pass_path: Path = Path(pass_path)
-            pass_path.parent.mkdir(parents=True, exist_ok=True)
-            pass_path.write_text(password, encoding="utf-8")
+        pass_path: Path = Path(pass_path)
+        pass_path.parent.mkdir(parents=True, exist_ok=True)
+        pass_path.write_text(password, encoding="utf-8")
 
-            try:
-                pass_path.chmod(0o600)
-            except OSError:
-                logger.warning("Could not restrict file permissions", path=str(pass_path))
+        try:
+            pass_path.chmod(0o600)
+        except OSError:
+            logger.warning("Could not restrict file permissions", path=str(pass_path))
 
-        logger.info("Admin user created", username=username, credentials_path=pass_path)
+        logger.info("Admin user created", username=username, credentials_path=str(pass_path))
         users.append(user)
 
     return users[0] if len(users) > 0 else None

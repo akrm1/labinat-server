@@ -131,8 +131,10 @@ class Catalog:
 
             # create factory directory structure
             self.__create_factory_directory_structure(factory)
-            # insert factory record
+            # insert factory record, flushed before the frames whose foreign
+            # keys point at it (no relationships exist to order them)
             db.add(FactoryModel(name=factory.name, version=factory.version, data=factory.spec.data))
+            db.flush()
 
             # create and add frames to factory
             for frame_name in frames:
@@ -404,6 +406,9 @@ class Catalog:
                     existing.data = factory_data
                 else:
                     db.add(FactoryModel(name=name, version=version, data=factory_data))
+                # Flushed so the factory row exists before its frames are
+                # inserted against it.
+                db.flush()
 
                 for frame_name, frame_data in frames.items():
                     frame_record = db.query(FrameModel).filter_by(
