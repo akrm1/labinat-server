@@ -11,7 +11,7 @@ class PipelineError(Exception):
 
 
 class PipelineExecuter:
-    """Runs a factory pipeline (`init`, `build`, `run`, `debug`, `release`).
+    """Runs a factory pipeline (`init`, `build`, `run`, `debug`).
 
     Each action is `{name, cmd}`; `cmd` may be a Jinja template filled from
     the project/factory context passed into `__call__`. An empty action list

@@ -75,18 +75,6 @@
                         },
                         "required": ["name", "cmd"]
                     }
-                },
-                "release": {
-                    "type": "array",
-                    "description": "Package the application for release",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": { "type": "string" },
-                            "cmd":  { "type": "string" }
-                        },
-                        "required": ["name", "cmd"]
-                    }
                 }
             }
         }

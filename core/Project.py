@@ -9,6 +9,8 @@ from utils import logger
 from base.Spec import Spec
 from base.DirectoryTemplate import DirectoryTemplate
 from base.PipelineExecuter import PipelineExecuter, PipelineError
+from base.ImageBuilder import ImageBuilder, ImageBuildError
+from base.filters import snake
 
 if TYPE_CHECKING:
     from core.resources.Factory import Factory
@@ -21,8 +23,8 @@ class Project():
     Disk layout lives under `workspace/projects/<id>/`. `clone()` renders each
     factory's `base/` templates into `src/<factory>/`. `build()` orchestrates
     validate → clone → init → emit blocks → build pipeline. Other pipeline
-    methods (`init`, `run`, `debug`, `release`) run optional shell sequences
-    with cwd set to `src/<factory>`.
+    methods (`init`, `run`, `debug`) run optional shell sequences with cwd set
+    to `src/<factory>`. `package()` builds a container image per factory.
     """
 
     def __init__(self, id: str, name: str, path: Path, created_at: datetime, description: str = "", config: dict = {}):
@@ -348,8 +350,43 @@ class Project():
         logger.info("Debugging project", project_id=self.__id, name=self.__name)
         self.__execute_pipeline(pipeline_name="debug")
 
-    def release(self):
-        """Run the optional `release` pipeline (package for release)."""
-        logger.info("Releasing project", project_id=self.__id, name=self.__name)
-        self.__execute_pipeline(pipeline_name="release")
-        logger.info("Release finished", project_id=self.__id)
+    def package(self, tool: str = "docker") -> list[str]:
+        """Build a container image for each attached factory that emitted a Dockerfile.
+
+        Meant to run after `build()`: a factory's `base/Dockerfile.j2` renders
+        into `src/<factory>/Dockerfile` during clone, and this builds that tree
+        into a locally-tagged image (`<app>-<factory>:<short-id>`). Factories
+        without a Dockerfile are skipped. Raises `ImageBuildError` on the first
+        failed build so a broken image stops the run.
+        """
+        app_name = self.__config.data.get("app", {}).get("name")
+        if not app_name:
+            raise ImageBuildError("Cannot tag images: project config has no 'app.name'")
+
+        logger.info("Packaging project into images", project_id=self.__id, tool=tool)
+        builder = ImageBuilder(tool=tool)
+        tags: list[str] = []
+
+        for factory_name in self.__factories:
+            context_dir = self.get_factory_path(factory_name)
+            if not context_dir.joinpath("Dockerfile").exists():
+                logger.debug("Factory has no Dockerfile; skipping image build", factory=factory_name)
+                continue
+
+            tag = f"{snake(app_name)}-{factory_name}:{self.__id[:8]}"
+            return_code = builder.build(context_dir=context_dir, tag=tag)
+            if return_code != 0:
+                logger.error(
+                    "Project packaging failed",
+                    project_id=self.__id,
+                    factory=factory_name,
+                    tag=tag,
+                    return_code=return_code,
+                )
+                raise ImageBuildError(
+                    f"Image build for factory '{factory_name}' failed with return code {return_code}"
+                )
+            tags.append(tag)
+
+        logger.info("Packaging finished", project_id=self.__id, images=tags)
+        return tags

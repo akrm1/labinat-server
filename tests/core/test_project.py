@@ -6,6 +6,7 @@ import pytest
 
 from core.Project import Project
 from core.resources.Factory import Factory
+from base.ImageBuilder import ImageBuildError
 
 
 class FakeFrame:
@@ -125,7 +126,6 @@ def test_validate_config_raises_when_app_name_missing():
     ("init", "init"),
     ("run", "run"),
     ("debug", "debug"),
-    ("release", "release"),
 ])
 def test_pipeline_methods_execute_declared_actions_with_factory_cwd(tmp_path, method_name, pipeline_key):
     project = make_project(path=tmp_path / "proj")
@@ -145,7 +145,7 @@ def test_pipeline_methods_execute_declared_actions_with_factory_cwd(tmp_path, me
     assert execute.call_args.kwargs["cwd"] == project.get_factory_path("backend-fastapi")
 
 
-@pytest.mark.parametrize("method_name", ["init", "run", "debug", "release"])
+@pytest.mark.parametrize("method_name", ["init", "run", "debug"])
 def test_pipeline_methods_are_noop_when_pipelines_missing_or_empty(tmp_path, method_name):
     project = make_project(path=tmp_path / "proj")
     project.add_factory(make_factory_with_pipelines({}))
@@ -166,7 +166,6 @@ def test_pipeline_methods_skip_undeclared_keys_but_run_others(tmp_path):
         project.init()
         project.run()
         project.debug()
-        project.release()
 
     cmds = [call.args[0] for call in execute.call_args_list]
     assert cmds == ["echo init", "echo run"]
@@ -271,3 +270,70 @@ def test_build_fails_fast_on_invalid_config(tmp_path):
         with pytest.raises(Exception):
             project.build()
         execute.assert_not_called()
+
+
+def _emit_dockerfile(project, factory_name):
+    context_dir = project.get_factory_path(factory_name)
+    context_dir.mkdir(parents=True, exist_ok=True)
+    (context_dir / "Dockerfile").write_text("FROM scratch")
+    return context_dir
+
+
+def test_package_builds_one_image_per_factory_with_a_dockerfile(tmp_path):
+    project = make_project(path=tmp_path / "proj", config={"app": {"name": "My App"}})
+    project.add_factory(make_factory_with_pipelines(path=tmp_path / "f", name="backend-fastapi"))
+    context_dir = _emit_dockerfile(project, "backend-fastapi")
+
+    with patch("core.Project.ImageBuilder") as Builder:
+        Builder.return_value.build.return_value = 0
+        tags = project.package()
+
+    assert tags == ["my_app-backend-fastapi:p1"]
+    Builder.assert_called_once_with(tool="docker")
+    Builder.return_value.build.assert_called_once_with(
+        context_dir=context_dir, tag="my_app-backend-fastapi:p1"
+    )
+
+
+def test_package_skips_factories_without_a_dockerfile(tmp_path):
+    project = make_project(path=tmp_path / "proj")
+    project.add_factory(make_factory_with_pipelines(path=tmp_path / "a", name="backend-fastapi"))
+    project.add_factory(make_factory_with_pipelines(path=tmp_path / "b", name="frontend"))
+    _emit_dockerfile(project, "backend-fastapi")  # only the backend ships one
+
+    with patch("core.Project.ImageBuilder") as Builder:
+        Builder.return_value.build.return_value = 0
+        tags = project.package()
+
+    assert tags == ["demo-backend-fastapi:p1"]
+    assert Builder.return_value.build.call_count == 1
+
+
+def test_package_raises_when_a_build_fails(tmp_path):
+    project = make_project(path=tmp_path / "proj")
+    project.add_factory(make_factory_with_pipelines(path=tmp_path / "f", name="backend-fastapi"))
+    _emit_dockerfile(project, "backend-fastapi")
+
+    with patch("core.Project.ImageBuilder") as Builder:
+        Builder.return_value.build.return_value = 3
+        with pytest.raises(ImageBuildError):
+            project.package()
+
+
+def test_package_uses_the_configured_tool(tmp_path):
+    project = make_project(path=tmp_path / "proj")
+    project.add_factory(make_factory_with_pipelines(path=tmp_path / "f", name="backend-fastapi"))
+    _emit_dockerfile(project, "backend-fastapi")
+
+    with patch("core.Project.ImageBuilder") as Builder:
+        Builder.return_value.build.return_value = 0
+        project.package(tool="podman")
+
+    Builder.assert_called_once_with(tool="podman")
+
+
+def test_package_raises_when_app_name_is_missing(tmp_path):
+    project = make_project(path=tmp_path / "proj", config={"app": {}})
+
+    with pytest.raises(ImageBuildError):
+        project.package()

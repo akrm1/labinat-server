@@ -76,7 +76,7 @@ class Factory(CatalogResource):
 
     @property
     def pipelines(self) -> dict:
-        """Optional named shell pipelines (`init`, `build`, `run`, `debug`, `release`)."""
+        """Optional named shell pipelines (`init`, `build`, `run`, `debug`)."""
         return self.spec.get('pipelines', {})
 
     def add_frame(self, frame: "Frame"):

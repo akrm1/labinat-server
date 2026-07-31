@@ -16,7 +16,7 @@ Technical reference for Labinat. Covers all core terms, how the system is struct
 | **Bindings** | Snippet templates that describe how this frame's data appears when embedded inside another frame's output. |
 | **Map** | A named key→value lookup registered as a custom schema type (`map.<name>`), typically shared across a factory. |
 | **Workspace** | Where projects, blocks, and generated source live. Path configured in `config.yaml` (default: `workspace/`). |
-| **Pipelines** | Optional factory shell command sequences (`init`, `build`, `run`, `debug`, `release`). Omit any a factory does not need. |
+| **Pipelines** | Optional factory shell command sequences (`init`, `build`, `run`, `debug`). Omit any a factory does not need. |
 | **User** | A principal that can authenticate: a human (password + JWT) or a service account (API token only, no password). |
 | **Group** | An org bucket of users bound to one Role. Users may belong to many groups. |
 | **Role** | A named, customizable list of permission strings. Never hardcoded — created/edited at runtime. |
@@ -103,8 +103,9 @@ A **concrete** is one named output file a frame knows how to produce.
 
 | Concern | Driven by | Typical operations |
 |---------|-----------|-------------------|
-| Project toolchain | Factory `pipelines` → `PipelineExecuter` | `init`, `build`, `run`, `debug`, `release` (all optional) |
+| Project toolchain | Factory `pipelines` → `PipelineExecuter` | `init`, `build`, `run`, `debug` (all optional) |
 | Block → source file | Frame concretes + Jinja2 | emit via `Block.build` / `Frame.render` |
+| Container image | `Project.package()` → `ImageBuilder` | build one image per factory that ships a `Dockerfile` |
 
 | Pipeline | Timing in `Project.build()` |
 |----------|-----------------------------|
@@ -112,7 +113,8 @@ A **concrete** is one named output file a frame knows how to produce.
 | `init` | After clone, before emitting blocks (`cwd=src/<factory>`) |
 | *(emit)* | Decode + render every registered block into its factory src tree |
 | `build` | After emit (`cwd=src/<factory>`) |
-| `run` / `debug` / `release` | On demand via `Project.run/debug/release` (same cwd) |
+| `run` / `debug` | On demand via `Project.run/debug` (same cwd) |
+| *(package)* | On demand via `Project.package()` — build a container image per factory |
 
 `Project.build()` order: **validate_config → clone → init → emit → build pipeline**.
 
