@@ -1,7 +1,7 @@
 import pytest
 
-from core.resources.Frame import Frame
-from core.resources.Block import Block
+from app.core.resources.Frame import Frame
+from app.core.resources.Block import Block
 
 
 class FakeFactory:

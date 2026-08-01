@@ -1,10 +1,10 @@
 import pytest
 
 from app import bootstrap
-from core.auth.Group import Group
-from core.auth.Role import Role
-from core.auth.Session import Session
-from core.auth.User import User
+from app.core.auth.Group import Group
+from app.core.auth.Role import Role
+from app.core.auth.Session import Session
+from app.core.auth.User import User
 from data import database
 
 

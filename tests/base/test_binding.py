@@ -1,4 +1,4 @@
-from base.Binding import Binding
+from app.base.Binding import Binding
 
 
 def test_binding_delegates_to_injected_callables():

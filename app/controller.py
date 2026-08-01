@@ -1,5 +1,5 @@
-from core.Catalog import Catalog
-from core.Workspace import Workspace
+from app.core.Catalog import Catalog
+from app.core.Workspace import Workspace
 
 catalog: Catalog = None
 workspace: Workspace = None

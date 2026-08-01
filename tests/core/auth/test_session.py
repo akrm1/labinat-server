@@ -1,8 +1,8 @@
 import pytest
 
-from base.Tokenizer import TokenError
-from core.auth.Session import Session
-from core.auth.User import User
+from app.base.Tokenizer import TokenError
+from app.core.auth.Session import Session
+from app.core.auth.User import User
 
 
 @pytest.fixture(autouse=True)

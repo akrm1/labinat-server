@@ -1,4 +1,4 @@
-from base.types.DataType import DataType, DecodingError
+from app.base.types.DataType import DataType, DecodingError
 
 
 class FakeType(DataType):

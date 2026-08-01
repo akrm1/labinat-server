@@ -1,6 +1,6 @@
 import pytest
 
-from base.Schema import Schema, ValidationError, MissingKeyError, UndefinedTypeError
+from app.base.Schema import Schema, ValidationError, MissingKeyError, UndefinedTypeError
 from tests.helpers import FakeType
 
 

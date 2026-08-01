@@ -1,8 +1,8 @@
 import pytest
 
-from core.auth.Group import Group, GroupError
-from core.auth.Role import Role
-from core.auth.User import User
+from app.core.auth.Group import Group, GroupError
+from app.core.auth.Role import Role
+from app.core.auth.User import User
 
 
 def test_create_binds_role_instance(db):

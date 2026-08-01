@@ -1,7 +1,7 @@
 import pytest
 
-from core.auth.Group import Group
-from core.auth.Role import Role, RoleError
+from app.core.auth.Group import Group
+from app.core.auth.Role import Role, RoleError
 
 
 def test_create_persists_permissions(db):

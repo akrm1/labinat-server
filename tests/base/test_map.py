@@ -1,8 +1,8 @@
 import pytest
 
-from base.Spec import Spec
-from base.types.DataType import DecodingError
-from base.types.Map import Map
+from app.base.Spec import Spec
+from app.base.types.DataType import DecodingError
+from app.base.types.Map import Map
 
 
 def test_map_name_is_prefixed():

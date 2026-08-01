@@ -6,10 +6,10 @@ from data.models.ProjectFactoryModel import ProjectFactoryModel
 from data.models.FactoryModel import FactoryModel
 from data.models.FrameModel import FrameModel
 from data.models.BlockModel import BlockModel
-from core.Workspace import Workspace
-from core.Catalog import Catalog
-from core.resources.Factory import Factory
-from core.resources.Frame import Frame
+from app.core.Workspace import Workspace
+from app.core.Catalog import Catalog
+from app.core.resources.Factory import Factory
+from app.core.resources.Frame import Frame
 
 
 @pytest.fixture

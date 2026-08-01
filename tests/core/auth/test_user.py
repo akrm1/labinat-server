@@ -1,8 +1,8 @@
 import pytest
 
-from core.auth.Group import Group
-from core.auth.Role import Role
-from core.auth.User import InvalidCredentialsError, PermissionDeniedError, User, UserError
+from app.core.auth.Group import Group
+from app.core.auth.Role import Role
+from app.core.auth.User import InvalidCredentialsError, PermissionDeniedError, User, UserError
 
 
 # --- creation ---------------------------------------------------------

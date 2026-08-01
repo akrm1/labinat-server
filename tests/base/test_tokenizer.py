@@ -3,7 +3,7 @@ from datetime import timedelta
 import jwt
 import pytest
 
-from base.Tokenizer import Tokenizer, TokenError
+from app.base.Tokenizer import Tokenizer, TokenError
 
 
 def make_tokenizer(**kwargs):

@@ -1,6 +1,6 @@
 import pytest
 
-from core.resources.Frame import Frame
+from app.core.resources.Frame import Frame
 
 
 @pytest.fixture

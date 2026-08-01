@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from core.resources.Factory import Factory
-from base.Spec import Spec
+from app.core.resources.Factory import Factory
+from app.base.Spec import Spec
 from utils.helpers import load_json
 
 

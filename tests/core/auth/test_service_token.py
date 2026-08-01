@@ -2,9 +2,9 @@ from datetime import timedelta
 
 import pytest
 
-from base.Tokenizer import TokenError
-from core.auth.ServiceToken import ServiceToken
-from core.auth.User import User, UserError
+from app.base.Tokenizer import TokenError
+from app.core.auth.ServiceToken import ServiceToken
+from app.core.auth.User import User, UserError
 from utils.helpers import utcnow
 
 

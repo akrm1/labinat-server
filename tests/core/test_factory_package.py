@@ -8,8 +8,8 @@ import pytest
 from data import database
 from data.models.FactoryModel import FactoryModel
 from data.models.FrameModel import FrameModel
-from core.Catalog import Catalog
-from base.Packager import PackagerError
+from app.core.Catalog import Catalog
+from app.base.Packager import PackagerError
 
 FORMAT_VERSION = 1
 

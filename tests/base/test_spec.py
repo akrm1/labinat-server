@@ -1,8 +1,8 @@
 import pytest
 
-from base.Spec import Spec, Attribute
-from base.types.DataType import DecodingError
-from base.Schema import Schema
+from app.base.Spec import Spec, Attribute
+from app.base.types.DataType import DecodingError
+from app.base.Schema import Schema
 from tests.helpers import FakeType
 
 

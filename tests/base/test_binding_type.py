@@ -1,7 +1,7 @@
 import pytest
 
-from base.Binding import Binding
-from base.types.BindingType import BindingType, BindingException
+from app.base.Binding import Binding
+from app.base.types.BindingType import BindingType, BindingException
 
 
 class DummyDest:

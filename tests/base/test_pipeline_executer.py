@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from base.PipelineExecuter import PipelineExecuter
+from app.base.PipelineExecuter import PipelineExecuter
 
 
 def test_empty_actions_is_noop_and_does_not_call_shell():

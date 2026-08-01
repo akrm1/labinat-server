@@ -4,9 +4,9 @@ from unittest.mock import patch
 
 import pytest
 
-from core.Project import Project
-from core.resources.Factory import Factory
-from base.ImageBuilder import ImageBuildError
+from app.core.Project import Project
+from app.core.resources.Factory import Factory
+from app.base.ImageBuilder import ImageBuildError
 
 
 class FakeFrame:
@@ -284,7 +284,7 @@ def test_package_builds_one_image_per_factory_with_a_dockerfile(tmp_path):
     project.add_factory(make_factory_with_pipelines(path=tmp_path / "f", name="backend-fastapi"))
     context_dir = _emit_dockerfile(project, "backend-fastapi")
 
-    with patch("core.Project.ImageBuilder") as Builder:
+    with patch("app.core.Project.ImageBuilder") as Builder:
         Builder.return_value.build.return_value = 0
         tags = project.package()
 
@@ -301,7 +301,7 @@ def test_package_skips_factories_without_a_dockerfile(tmp_path):
     project.add_factory(make_factory_with_pipelines(path=tmp_path / "b", name="frontend"))
     _emit_dockerfile(project, "backend-fastapi")  # only the backend ships one
 
-    with patch("core.Project.ImageBuilder") as Builder:
+    with patch("app.core.Project.ImageBuilder") as Builder:
         Builder.return_value.build.return_value = 0
         tags = project.package()
 
@@ -314,7 +314,7 @@ def test_package_raises_when_a_build_fails(tmp_path):
     project.add_factory(make_factory_with_pipelines(path=tmp_path / "f", name="backend-fastapi"))
     _emit_dockerfile(project, "backend-fastapi")
 
-    with patch("core.Project.ImageBuilder") as Builder:
+    with patch("app.core.Project.ImageBuilder") as Builder:
         Builder.return_value.build.return_value = 3
         with pytest.raises(ImageBuildError):
             project.package()
@@ -325,7 +325,7 @@ def test_package_uses_the_configured_tool(tmp_path):
     project.add_factory(make_factory_with_pipelines(path=tmp_path / "f", name="backend-fastapi"))
     _emit_dockerfile(project, "backend-fastapi")
 
-    with patch("core.Project.ImageBuilder") as Builder:
+    with patch("app.core.Project.ImageBuilder") as Builder:
         Builder.return_value.build.return_value = 0
         project.package(tool="podman")
 
