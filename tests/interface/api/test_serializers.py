@@ -7,7 +7,7 @@ wrong method name here fails loudly instead of only surfacing as a live 500.
 from types import SimpleNamespace
 
 from app.base.Spec import Spec
-from app.api.serializers import block_to_dict, frame_to_dict
+from app.interface.serializers import block_to_dict, frame_to_dict
 
 
 def test_block_to_dict_uses_spec_data():

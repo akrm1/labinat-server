@@ -1,6 +1,6 @@
 """Permission enforcement: reads allowed for a reader, writes require permission."""
 
-from tests.api.conftest import auth_header
+from tests.interface.api.conftest import auth_header
 
 
 def test_reader_can_read_the_catalog(client, reader_token):

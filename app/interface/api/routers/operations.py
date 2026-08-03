@@ -7,15 +7,14 @@ event. Disconnecting the request cancels the operation and stops any subprocess.
 
 from fastapi import APIRouter, Depends, Request
 
-from app.api.deps import get_catalog, get_workspace, require_permission
-from app.api.operations import stream_operation
-from app.api.routers.projects import load_project
+from app.interface.api.deps import get_catalog, get_workspace, require_permission
+from app.interface.api.operations import stream_operation
+from app.interface.api.routers.projects import load_project
+from app.interface.permissions import PROJECT_EXECUTE as EXECUTE
 from app.core.Catalog import Catalog
 from app.core.Workspace import Workspace
 
 router = APIRouter(prefix="/projects/{project_id}", tags=["operations"])
-
-EXECUTE = "project:execute"
 
 
 @router.post("/build")

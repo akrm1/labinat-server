@@ -2,9 +2,9 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.api import schemas
-from app.api.deps import get_current_user
-from app.api.serializers import user_to_dict
+from app.interface.api import schemas
+from app.interface.api.deps import get_current_user
+from app.interface.serializers import user_to_dict
 from app.core.auth.User import User, InvalidCredentialsError
 from app.core.auth.Session import Session
 from app.base.Tokenizer import TokenError

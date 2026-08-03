@@ -2,15 +2,13 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api import schemas
-from app.api.deps import get_catalog, require_permission
-from app.api.serializers import factory_to_dict, frame_to_dict
+from app.interface.api import schemas
+from app.interface.api.deps import get_catalog, require_permission
+from app.interface.permissions import CATALOG_READ as READ, CATALOG_WRITE as WRITE
+from app.interface.serializers import factory_to_dict, frame_to_dict
 from app.core.Catalog import Catalog
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
-
-READ = "catalog:read"
-WRITE = "catalog:write"
 
 
 @router.get("/factories")

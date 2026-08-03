@@ -1,6 +1,6 @@
 """RBAC admin over HTTP: roles, groups, users, and service tokens."""
 
-from tests.api.conftest import auth_header
+from tests.interface.api.conftest import auth_header
 
 
 def test_create_role_group_and_user(client, admin_token):

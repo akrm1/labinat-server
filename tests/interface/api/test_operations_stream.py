@@ -3,7 +3,7 @@
 import asyncio
 import threading
 
-from app.api import operations
+from app.interface.api import operations
 from utils import logger
 from utils.cancellation import current_token
 

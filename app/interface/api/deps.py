@@ -8,10 +8,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app import controller
 from app.core.Catalog import Catalog
 from app.core.Workspace import Workspace
-from app.core.auth.Session import Session
-from app.core.auth.ServiceToken import ServiceToken
 from app.core.auth.User import User
-from app.base.Tokenizer import TokenError
+from app.interface.identity import authenticate_bearer
 
 bearer_scheme = HTTPBearer(auto_error=True, description="Session access token or service-account token")
 
@@ -19,24 +17,15 @@ bearer_scheme = HTTPBearer(auto_error=True, description="Session access token or
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> User:
-    """Resolve the bearer token to a user: a human session, else a service token."""
-    token = credentials.credentials
-
-    try:
-        return Session.authenticate(token)
-    except TokenError:
-        pass
-
-    try:
-        return ServiceToken.authenticate(token)
-    except TokenError:
-        pass
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    """Resolve the bearer token to a user (shared with the MCP surface)."""
+    user = authenticate_bearer(credentials.credentials)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
 
 
 def require_permission(permission: str) -> Callable[..., User]:

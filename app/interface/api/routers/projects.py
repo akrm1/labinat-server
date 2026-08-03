@@ -2,17 +2,15 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api import schemas
-from app.api.deps import get_catalog, get_workspace, require_permission
-from app.api.serializers import project_to_dict, block_to_dict
+from app.interface.api import schemas
+from app.interface.api.deps import get_catalog, get_workspace, require_permission
+from app.interface.permissions import PROJECT_READ as READ, PROJECT_WRITE as WRITE
+from app.interface.serializers import project_to_dict, block_to_dict
 from app.core.Catalog import Catalog
 from app.core.Workspace import Workspace
 from app.core.Project import Project
 
 router = APIRouter(prefix="/projects", tags=["projects"])
-
-READ = "project:read"
-WRITE = "project:write"
 
 
 def load_project(project_id: str, workspace: Workspace, catalog: Catalog) -> Project:

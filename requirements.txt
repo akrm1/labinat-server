@@ -10,3 +10,6 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.8.2
 httpx==0.28.1
+mcp==1.12.0
+starlette==0.41.3
+sse-starlette==2.1.3

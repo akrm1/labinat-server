@@ -1,10 +1,4 @@
 # بسم الله الرحمن الرحيم
-"""Launch the labinat REST API (Swagger UI at /docs).
-
-The composition root: bootstrap the server, read the resulting config, then
-serve it. Host/port/reload come from the config's `server:` section, with
-optional `LABINAT_*` environment overrides.
-"""
 
 import os
 

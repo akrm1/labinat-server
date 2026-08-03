@@ -1,6 +1,6 @@
 """Auth flow: login, current user, refresh rotation, logout, and token errors."""
 
-from tests.api.conftest import auth_header, login
+from tests.interface.api.conftest import auth_header, login
 
 
 def test_login_returns_a_token_pair(client):

@@ -1,6 +1,6 @@
 """Representative project lifecycle over HTTP: create, list, get, delete."""
 
-from tests.api.conftest import auth_header
+from tests.interface.api.conftest import auth_header
 
 
 def test_project_crud_roundtrip(client, admin_token):

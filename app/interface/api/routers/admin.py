@@ -4,9 +4,10 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api import schemas
-from app.api.deps import require_permission
-from app.api.serializers import (
+from app.interface.api import schemas
+from app.interface.api.deps import require_permission
+from app.interface.permissions import ADMIN_READ as READ, ADMIN_WRITE as WRITE
+from app.interface.serializers import (
     user_to_dict,
     role_to_dict,
     group_to_dict,
@@ -18,9 +19,6 @@ from app.core.auth.Group import Group
 from app.core.auth.ServiceToken import ServiceToken
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-READ = "admin:read"
-WRITE = "admin:write"
 
 
 def _get_user(username: str) -> User:

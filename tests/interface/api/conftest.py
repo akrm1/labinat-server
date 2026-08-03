@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import controller
-from app.api.app import create_app
+from app.interface.api.app import create_app
 from app.core.auth.Group import Group
 from app.core.auth.Role import Role
 from app.core.auth.User import User

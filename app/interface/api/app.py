@@ -1,8 +1,9 @@
 """FastAPI application factory.
 
-Pure assembly of the HTTP app: routers, error handlers, and docs. It knows
-nothing about process lifecycle — `app.server` owns startup/shutdown and passes
-its `lifespan` in. This keeps the dependency pointing one way (server → app).
+Pure assembly of the REST surface: routers, error handlers, and docs. It knows
+nothing about process lifecycle or the MCP surface — `app.server` owns
+startup/shutdown, passes in a `lifespan`, and mounts MCP alongside it. This keeps
+the dependency pointing one way (server → surfaces).
 """
 
 from typing import Callable, Optional
@@ -20,7 +21,7 @@ from app.core.auth.User import UserError, InvalidCredentialsError, PermissionDen
 from app.core.auth.Role import RoleError
 from app.core.auth.Group import GroupError
 
-from app.api.routers import auth, catalog, projects, operations, admin
+from app.interface.api.routers import auth, catalog, projects, operations, admin
 
 
 DESCRIPTION = (
