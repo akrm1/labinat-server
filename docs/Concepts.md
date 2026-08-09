@@ -2,20 +2,22 @@
 
 Technical reference for Labinat. Covers all core terms, how the system is structured, and how the pieces work together.
 
+> See also: **[Interfaces](Interfaces.md)** (REST + MCP reference, auth, RBAC) and **[Configuration](Configuration.md)** (settings, environment overrides, filesystem layout, deployment).
+
 ---
 
 ## Glossary
 
 | Term | Definition |
 |------|------------|
-| **Catalog** | The registry of factories and frames. Path configured in `config.yaml` (default: `catalog/`). |
+| **Catalog** | The registry of factories and frames. Path configurable (default: `/var/lib/labinat/catalog`). |
 | **Factory** | A versioned stack profile: optional pipelines, frame definitions, maps, and a config schema. |
 | **Frame** | A component-type definition: what fields a block may contain and what output files it produces. |
 | **Block** | One instance of a frame — a validated JSON object describing a single component (e.g. one table, one screen). |
 | **Concrete** | A named output file that a frame can generate. Each concrete maps to a template under `concretes/`. |
 | **Bindings** | Snippet templates that describe how this frame's data appears when embedded inside another frame's output. |
 | **Map** | A named key→value lookup registered as a custom schema type (`map.<name>`), typically shared across a factory. |
-| **Workspace** | Where projects, blocks, and generated source live. Path configured in `config.yaml` (default: `workspace/`). |
+| **Workspace** | Where projects, blocks, and generated source live. Path configurable (default: `/srv/labinat/workspace`). |
 | **Pipelines** | Optional factory shell command sequences (`init`, `build`, `run`, `debug`). Omit any a factory does not need. |
 | **User** | A principal that can authenticate: a human (password + JWT) or a service account (API token only, no password). |
 | **Group** | An org bucket of users bound to one Role. Users may belong to many groups. |
@@ -49,9 +51,9 @@ The **catalog** holds definitions; the **workspace** holds instances. A frame de
 
 ## Persistence
 
-All factory, frame, project, and block metadata is stored in a **SQLite database** (`data/database.db`, configured in `config.yaml`). The database schema is created automatically on first run.
+All factory, frame, project, and block metadata is stored in a **SQLite database** (default `/var/lib/labinat/database.db`, set by `database.url`). The database schema is created automatically on first run. Any SQLAlchemy backend works by changing the URL — see [Configuration](Configuration.md).
 
-On-disk directories under `catalog/factories/<name>/<version>/` hold files that do not live in a database column:
+On-disk directories under `<catalog>/factories/<name>/<version>/` hold files that do not live in a database column:
 
 | On disk | Purpose |
 |---------|---------|
@@ -66,7 +68,7 @@ Runtime generated project trees live under `workspace/projects/<project_id>/` an
 
 ## Spec, Schema, and custom types
 
-- Every resource wraps its JSON data in a [`Spec`](../base/Spec.py), which validates against a JSON Schema via [`Schema`](../base/Schema.py).
+- Every resource wraps its JSON data in a [`Spec`](../app/base/Spec.py), which validates against a JSON Schema via [`Schema`](../app/base/Schema.py).
 - Custom types register as `DataType` subclasses (`map.*`, `binding.*`). Schema `type` may be a single name or a list (OR semantics).
 - `Spec.validate` always runs when a schema is provided — empty data still fails `required` fields.
 - `Spec.decode` walks the data tree and applies registered type decoders (e.g. resolve `@block.users` bindings).
@@ -124,7 +126,7 @@ Blocks are only registered on a project when their frame's factory is already at
 
 ## Factory packages
 
-Factories are portable `.tar.gz` archives. [`Packager`](../base/Packager.py) handles stage/manifest/pack/unpack; [`Catalog`](../core/Catalog.py) owns `export_factory` / `import_factory`.
+Factories are portable `.tar.gz` archives. [`Packager`](../app/base/Packager.py) handles stage/manifest/pack/unpack; [`Catalog`](../app/core/Catalog.py) owns `export_factory` / `import_factory`.
 
 **Specs live in the database.** On-disk catalog trees hold artifacts only (`module.py`, concretes, bindings, `base/`). Spec JSON (`factory.json` / `frame.json`) exists only inside packages for transport:
 
@@ -158,7 +160,9 @@ Share factories via export/import. Path traversal and unsupported `format_versio
 
 ## Authentication and authorization
 
-Auth classes live in [`core/auth/`](../core/auth) and own their own persistence — `User.get(...)`, `user.set_password(...)`, `user.login(...)` each read and write the database directly. Generic mechanisms sit underneath them: [`Tokenizer`](../base/Tokenizer.py) signs JWTs and mints opaque secrets, [`utils/security`](../utils/security.py) hashes passwords, the same way `Packager` pairs with `utils/fs`.
+Auth classes live in [`app/core/auth/`](../app/core/auth) and own their own persistence — `User.get(...)`, `user.set_password(...)`, `user.login(...)` each read and write the database directly. Generic mechanisms sit underneath them: [`Tokenizer`](../app/base/Tokenizer.py) signs JWTs and mints opaque secrets, [`utils/security`](../utils/security.py) hashes passwords, the same way `Packager` pairs with `utils/fs`.
+
+The REST API and MCP server both build on these classes through the shared [`app/interface/identity.py`](../app/interface/identity.py) resolver and [`app/interface/permissions.py`](../app/interface/permissions.py) — see [Interfaces](Interfaces.md) for the endpoints, tools, and permission strings.
 
 | Class | Role |
 |-------|------|
@@ -196,7 +200,7 @@ First-run setup is not an auth concern — see [Bootstrap](#bootstrap) below.
 
 ```python
 def start() -> dict:
-    bootstrap.load()                              # config.yaml → bootstrap.config
+    bootstrap.load()                              # defaults + optional LABINAT_CONFIG → bootstrap.config
 
     token_secret = bootstrap.create_token_secret()  # resolve/generate the JWT secret
     bootstrap.init(token_secret)                    # logger, database, controller, Session signing
@@ -207,23 +211,25 @@ def start() -> dict:
 
 `create_token_secret()` runs before `init()` because it only touches the filesystem (no database yet); `create_admin()` runs after `init()` because it needs the database to be up. Nothing in `bootstrap.py` runs on import — each function does one job and is safe to repeat, since `start()` runs on every process start: fill in what is absent, leave existing records alone. That way a restart never overwrites an admin's later changes (a rotated password, an edited role).
 
-`bootstrap.create_token_secret` and `bootstrap.create_admin` read the `auth` section of `config.yaml`:
+Configuration is resolved by `bootstrap.load()`: built-in defaults, optionally overridden by a `LABINAT_CONFIG` file (deep-merged). `bootstrap.create_token_secret` and `bootstrap.create_admin` read the `auth` section:
 
 ```yaml
 auth:
   token:
-    secret-path: "auth/jwt-secret"   # generated on first run
+    secret-path: "/var/lib/labinat/secrets/jwt-secret"   # generated on first run
     algorithm: "HS256"
     access_ttl_minutes: 15
     refresh_ttl_days: 30
-  admin:
-    lab_admin:
-      pass-path: "auth/lab_admin-password"
+  admins:
+    labadmin:
+      pass-path: "/var/lib/labinat/secrets/lab_admin-password"
 ```
+
+A `LABINAT_CONFIG` file that defines `auth.admins` **replaces** this map rather than merging into it, so the built-in default admin never tags along into a deployment that defines its own. See [Configuration](Configuration.md).
 
 - **Signing secret** (`create_token_secret`) — the HMAC key that signs access tokens. Read from `secret-path`, generated there on first run (mode `600`) and left untouched afterwards. It is persisted rather than regenerated per boot because a new secret invalidates every token signed with the old one, logging everybody out; delete the file to rotate deliberately. `create_token_secret` raises `BootstrapError` if `secret-path` is missing. The resolved value is passed into `bootstrap.init`, which forwards it to `Session.init`; neither `Session` nor `Tokenizer` touch the filesystem themselves.
 - **Admin role and group** (`create_admin`) — the `admin` role (`["*"]`) and the `Admins` group bound to it, seeded once and left alone afterwards.
-- **Admin users** (`create_admin`) — one per key under `auth.admin` (the key *is* the username). Each new admin joins `Admins`, so it inherits full access, with a random password written to its `pass-path`. Existing usernames are skipped untouched.
+- **Admin users** (`create_admin`) — one per key under `auth.admins` (the key *is* the username). Each new admin joins `Admins`, so it inherits full access, with a random password written to its `pass-path`. Existing usernames are skipped untouched.
 
 Generated secrets are gitignored (`auth/*-password`, `auth/*-secret`).
 
@@ -231,7 +237,7 @@ Generated secrets are gitignored (`auth/*-password`, `auth/*-secret`).
 
 ## Logging
 
-All application logging goes through [`utils/logger.py`](../utils/logger.py), configured from the `logger` section of `config.yaml` during `bootstrap.init()`.
+All application logging goes through [`utils/logger.py`](../utils/logger.py), configured from the `logger` section of the resolved config during `bootstrap.init()`.
 
 | Severity | Typical use |
 |----------|-------------|
@@ -251,7 +257,7 @@ All application logging goes through [`utils/logger.py`](../utils/logger.py), co
 
 Hot paths (e.g. `BindingType.validate` during jsonschema checks) stay quiet — log at registration or decode time instead.
 
-Set `logger.level: DEBUG` in `config.yaml` (or the console handler level) to see base/core construct and validate traces.
+Set `logger.level: debug` in your config (or the console handler level) to see base/core construct and validate traces.
 
 ---
 
@@ -259,20 +265,22 @@ Set `logger.level: DEBUG` in `config.yaml` (or the console handler level) to see
 
 | Path | Role |
 |------|------|
-| `catalog/` | Factory on-disk layout: frames, concretes, bindings, maps data, base |
+| `catalog/` | Example factory on-disk layout: frames, concretes, bindings, maps data, base |
 | `catalog/schemas/` | JSON schemas that validate factory and frame data |
-| `workspace/` | Projects with generated `src/` |
-| `core/` | Domain models: `Catalog`, `Workspace`, `Project`, `Factory`, `Frame`, `Block` |
-| `core/auth/` | `User`, `Group`, `Role`, `Session`, `ServiceToken` |
-| `base/` | Foundations: `Resource`, `CatalogResource`, `Spec`, `Schema`, `PipelineExecuter`, `DataType`, `Binding`, `Packager`, `Tokenizer` |
+| `workspace/` | Projects with generated `src/` (default lives at `/srv/labinat/workspace`) |
+| `app/core/` | Domain models: `Catalog`, `Workspace`, `Project`, `Factory`, `Frame`, `Block` |
+| `app/core/auth/` | `User`, `Group`, `Role`, `Session`, `ServiceToken` |
+| `app/base/` | Foundations: `Resource`, `CatalogResource`, `Spec`, `Schema`, `PipelineExecuter`, `ImageBuilder`, `DataType`, `Binding`, `Packager`, `Tokenizer` |
+| `app/interface/` | REST (`api/`) and MCP (`mcp/`) surfaces + shared `serializers`, `permissions`, `identity` |
 | `data/` | SQLite persistence via SQLAlchemy (models + `database.py`) |
-| `utils/` | `RuntimeModule`, centralized logger, shell and security helpers |
+| `utils/` | `RuntimeModule`, centralized logger, shell/security/filesystem helpers |
 | `tests/` | pytest suite |
 | `app/` | Composition root: wires config into a running process |
-| `app/server.py` | `start()`: sequences `bootstrap`'s setup operations |
+| `app/server.py` | `start()` (bootstrap), `create()` (compose REST + MCP), `run()` (serve), `shutdown()` |
 | `app/controller.py` | Singleton `Catalog` and `Workspace` |
-| `app/bootstrap.py` | Idempotent setup operations: config loading, logger/database/controller, auth signing secret, admin role/group/users |
-| `config.yaml` | Catalog/workspace paths, database URL, auth token + admin settings, logger settings |
+| `app/bootstrap.py` | Built-in defaults + idempotent setup: config loading, directory creation, logger/database/controller, auth signing secret, admin role/group/users |
+| `main.py` | Orchestrator: `start()` → `run(host, port, reload)` → `shutdown()` |
+| `LABINAT_CONFIG` | Optional YAML file, deep-merged over the built-in defaults (see [Configuration](Configuration.md)) |
 
 ---
 
@@ -288,13 +296,13 @@ Set `logger.level: DEBUG` in `config.yaml` (or the console handler level) to see
 
 ## Running
 
-Requires Python 3.12+ (see project env). Configure `config.yaml`, then:
+Requires Python 3.12+. The built-in defaults use production paths; for local use, point `LABINAT_CONFIG` at a file with project-relative paths (see the [README quickstart](../README.md#quickstart)):
 
 ```bash
-python main.py
+LABINAT_CONFIG=labinat.dev.yaml python main.py
 ```
 
-`server.start()` loads the config, sets up the logger (format, datefmt, console/file handlers), auto-creates the database schema, wires the `Catalog` and `Workspace` singletons, and prepares auth (token signing secret, admin role/group/users) — see [Bootstrap](#bootstrap).
+`server.start()` loads the config, creates the directories it needs, sets up the logger, auto-creates the database schema, wires the `Catalog` and `Workspace` singletons, and prepares auth (token signing secret, admin role/group/users) — see [Bootstrap](#bootstrap). `server.run()` then serves the composed **REST + MCP** app with uvicorn: Swagger UI at `/docs`, MCP at `/mcp`. For the full endpoint and tool reference see [Interfaces](Interfaces.md); for every setting and deployment guidance see [Configuration](Configuration.md).
 
 Run the test suite:
 
