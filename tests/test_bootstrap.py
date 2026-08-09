@@ -22,23 +22,60 @@ def _reset_bootstrap_config():
     bootstrap.config = None
 
 
-def set_auth_config(tmp_path, admin=None):
+def set_auth_config(tmp_path, admins=None):
     bootstrap.config = {
         "auth": {
             "token": {"secret-path": str(tmp_path / "jwt-secret")},
-            "admin": admin or {},
+            "admins": admins or {},
         }
     }
 
 
 # --- load ----------------------------------------------------------------
 
-def test_load_reads_config_yaml_from_the_cwd(tmp_path, monkeypatch):
-    (tmp_path / "config.yaml").write_text("workspace:\n  path: workspace\n")
-    monkeypatch.chdir(tmp_path)
+def test_load_merges_the_configured_file_over_the_current_config(tmp_path, monkeypatch):
+    bootstrap.config = {"workspace": {"path": "default-ws"}, "server": {"port": 8000}}
+    override = tmp_path / "custom.yaml"
+    override.write_text("workspace:\n  path: custom-ws\n")
+    monkeypatch.setenv("LABINAT_CONFIG", str(override))
 
     bootstrap.load()
-    assert bootstrap.config == {"workspace": {"path": "workspace"}}
+
+    assert bootstrap.config["workspace"]["path"] == "custom-ws"  # overridden by file
+    assert bootstrap.config["server"]["port"] == 8000            # untouched default
+
+
+def test_load_without_the_env_var_leaves_the_config_untouched(tmp_path, monkeypatch):
+    monkeypatch.delenv("LABINAT_CONFIG", raising=False)
+    bootstrap.config = {"workspace": {"path": "default-ws"}}
+
+    bootstrap.load()
+
+    assert bootstrap.config == {"workspace": {"path": "default-ws"}}
+
+
+def test_load_with_a_missing_file_falls_back_to_the_current_config(tmp_path, monkeypatch):
+    monkeypatch.setenv("LABINAT_CONFIG", str(tmp_path / "nope.yaml"))
+    bootstrap.config = {"workspace": {"path": "default-ws"}}
+
+    bootstrap.load()  # swallows the error and keeps going
+
+    assert bootstrap.config == {"workspace": {"path": "default-ws"}}
+
+
+def test_load_replaces_the_default_admins_rather_than_unioning(tmp_path, monkeypatch):
+    """A config file's admins fully replace the built-in default admin, so the
+    default's /var/lib pass-path never tags along into a deployment."""
+    bootstrap.config = {
+        "auth": {"admins": {"lab_admin": {"pass-path": "/var/lib/labinat/secrets/lab_admin-password"}}}
+    }
+    override = tmp_path / "custom.yaml"
+    override.write_text("auth:\n  admins:\n    ops_admin:\n      pass-path: ./ops-password\n")
+    monkeypatch.setenv("LABINAT_CONFIG", str(override))
+
+    bootstrap.load()
+
+    assert bootstrap.config["auth"]["admins"] == {"ops_admin": {"pass-path": "./ops-password"}}
 
 
 # --- create_admin: role and group ----------------------------------

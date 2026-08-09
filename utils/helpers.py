@@ -78,3 +78,13 @@ def flatten_dict(dictionary: Any, parent: str = "", sep: str = ".") -> dict[str,
 
     walk(dictionary, parent)
     return out
+
+def override_dict(_dict: dict, new_values: dict) -> dict:
+    """Deep-merge `new_values` into `_dict` in place (nested dicts recurse,
+    everything else replaces) and return it."""
+    for k, v in new_values.items():
+        if isinstance(v, dict) and isinstance(_dict.get(k), dict):
+            override_dict(_dict[k], v)
+        else:
+            _dict[k] = v
+    return _dict

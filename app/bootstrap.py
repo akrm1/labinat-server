@@ -10,7 +10,7 @@ changes (a rotated password, an edited role).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
+from utils.os import get_environment_variable
 
 import yaml
 
@@ -22,24 +22,95 @@ from app.core.auth.User import User
 from data import database
 from utils import logger
 from utils.security import generate_password, generate_secret
+from utils.helpers import override_dict
 
 
 class BootstrapError(Exception):
     """Raised when startup configuration is missing something required."""
 
 
-config: dict = None
+config: dict = {
+    "server": {
+        "host": "0.0.0.0",
+        "port": 8000,
+        "reload": False,
+        "mcp": {
+            "enabled": True,
+            "path": "/mcp"
+        }
+    },
+    "catalog": {
+        "path": "/var/lib/labinat/catalog"
+    },
+    "workspace": {
+        "path": "/srv/labinat/workspace"
+    },
+    "database": {
+        "url": "sqlite:////var/lib/labinat/database.db",
+        "logging": False
+    },
+    "auth": {
+        "token": {
+            "secret-path": "/var/lib/labinat/secrets/jwt-secret",
+            "algorithm": "HS256",
+            "access_ttl_minutes": 15,
+            "refresh_ttl_days": 30
+        },
+        "admins": {
+            "labadmin": {
+                "pass-path": "/var/lib/labinat/secrets/lab_admin-password"
+            }
+        }
+    },
+    "logger": {
+        "name": "app",
+        "level": "info",
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        "datefmt": "%Y-%m-%d %H:%M:%S",
+        "handlers": {
+            "console": {},
+            "file": {
+                "path": "/var/log/labinat.log"
+            }
+        }
+    }
+}
 
 
 def load() -> None:
     global config
+    config_path = get_environment_variable("LABINAT_CONFIG", None)
 
-    with open("config.yaml", "r") as file:
-        config = yaml.safe_load(file)
+    if config_path:
+        try:
+            with open(config_path, "r") as file:
+                config_override = yaml.safe_load(file)
+                config = override_dict(config, config_override)
+        except Exception as e:
+            logger.error("Error loading config file", error=e)
+            logger.warning("Using default config")
+    else:
+        logger.warning("No config file found, using default config")
+
 
 
 def init(token_secret: str) -> None:
     global config
+
+    # create directories for log files
+    log_filepath = (((config.get("logger") or {}).get("handlers") or {}).get("file") or {}).get("path", None)
+    if log_filepath:
+        Path(log_filepath).parent.mkdir(parents=True, exist_ok=True)
+
+    # create directories for auth tokens and admin passwords
+    auth_config = config.get("auth") or {}
+    token_secret_path = (auth_config.get("token") or {}).get("secret-path", None)
+    if token_secret_path:
+        Path(token_secret_path).parent.mkdir(parents=True, exist_ok=True)
+    for admin_config in (auth_config.get("admins") or {}).values():
+        pass_path = (admin_config or {}).get("pass-path", None)
+        if pass_path:
+            Path(pass_path).parent.mkdir(parents=True, exist_ok=True)
 
     logger.init(config["logger"])
     logger.info("Logger initialized")
@@ -79,7 +150,7 @@ def create_admin() -> User:
         description="Default administrators group.",
     )
 
-    admin_config = (config.get("auth") or {}).get("admin") or {}
+    admin_config = (config.get("auth") or {}).get("admins") or {}
     users: list[User] = []
     for username, user_config in admin_config.items():
         if User.get(username) is not None:
@@ -92,7 +163,7 @@ def create_admin() -> User:
         pass_path = user_config.get("pass-path")
         if not pass_path:
             raise BootstrapError(
-                f"auth.admin.{username}.pass-path is not configured; "
+                f"auth.admins.{username}.pass-path is not configured; "
                 "the generated password would have nowhere to be written"
             )
 

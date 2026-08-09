@@ -1,10 +1,11 @@
 import subprocess
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 from jinja2 import Template
 import re
 from utils import logger
 from utils.cancellation import guard_process
+import os
 
 
 def execute(cmd: str, inputs: dict = None, cwd: Union[str, Path] = None):
@@ -30,3 +31,6 @@ def get_parameters(cmd: str) -> dict:
     pattern = r'\{[\{%#]\s*(.*?)\s*[\}%#]\}'
     parameters = re.findall(pattern, cmd)      
     return parameters
+
+def get_environment_variable(var_name: str, default: Optional[str] = None) -> Optional[str]:
+    return os.environ.get(var_name, default)

@@ -1,7 +1,9 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.engine import make_url
 from contextlib import contextmanager
 from data.models.BaseModel import BaseModel
+from pathlib import Path
 
 engine = None
 SessionLocal = None
@@ -29,6 +31,11 @@ def init_db(database_config: dict):
     url = database_config["url"]
     logging = database_config["logging"]
     is_sqlite = url.startswith("sqlite")
+
+    if is_sqlite:
+        database_file = make_url(url).database
+        if database_file and database_file != ":memory:":
+            Path(database_file).parent.mkdir(parents=True, exist_ok=True)
 
     engine = create_engine(
         url,
